@@ -1,0 +1,57 @@
+#!/bin/bash
+
+remove_peer() {
+    echo -n "Enter PublicKey: "
+    read peer
+
+    if gawk -v pk="${peer}" \
+        '{ l[++n]=$0 }
+        /^PublicKey/ { if($3==pk){ f=1;fs=1 } }
+        /^$/ { if(f){ for(i=1;i<=n;i++){ print l[i] } } delete l;n=0;f=0 }
+        END { exit !fs }' \
+        ${NETDEV}
+    then
+        echo -n "Really remove this peer from ${NETDEV##*/}? [y/N] "
+        read del
+
+        if [[ "${del}" == "Y" || "${del}" == "y" ]]; then
+            gawk -i inplace -v pk="${peer}" \
+                '{ l[++n]=$0 }
+                /^PublicKey/ { if($3==pk){ f=1;fs=1 } }
+                /^$/ { if(!f){ for(i=1;i<=n;i++){ print l[i] } } delete l;n=0;f=0 }
+                END { exit !fs }' \
+                ${NETDEV}
+            echo -n "OK. "
+        fi
+
+        INTERFACE=$(awk '/Name = /{print $3}' ${NETDEV})
+
+        echo -n "Remove this configuration from running interface ${INTERFACE}? [y/N] "
+        read del
+
+        if [[ "${del}" == "Y" || "${del}" == "y" ]]; then
+            wg set ${INTERFACE} peer ${pubkey} remove
+            echo -n "OK. "
+        fi
+    else
+        echo "No peer with this PublicKey was found!"
+    fi
+}
+
+if [[ ! $UID -eq 0 ]]; then
+    echo "Privilege elevation..." >&2
+    sudo $0 $@
+    exit $?
+fi
+
+DEFAULT_NETDEV=$(ls /etc/systemd/network/*.netdev | grep -E 'wg|wireguard')
+NETDEV=${1:-${DEFAULT_NETDEV}}
+
+echo "Remove WireGuard peer(s) from ${NETDEV##*/}"
+
+cont="y"
+while [[ "${cont}" == "y" || "${cont}" == "Y" ]]; do
+    remove_peer
+    echo -n "Remove another peer? [y/N] "
+    read cont
+done

@@ -1,0 +1,75 @@
+#!/bin/bash -e
+
+add_peer() {
+    echo -n "Name/Comment: "
+    read comment
+
+    echo -n "PublicKey: "
+    read pubkey
+
+    if [[ -z "${pubkey}" ]]; then
+        echo "PublicKey cannot be empty!"
+        return
+    fi
+
+    if grep -q "${pubkey}" "${NETDEV}"; then
+        echo "A peer with this PublicKey already exists!"
+        return
+    fi
+
+    echo -n "AllowedIPs (including prefix length): "
+    read allowedips
+
+    if [[ -z "${allowedips}" ]]; then
+        echo "AllowedIPs cannot be empty!"
+        return
+    fi
+
+    if grep -q "${allowedips}" "${NETDEV}"; then
+        echo "A peer with this AllowedIPs already exists!"
+        return
+    fi
+
+    CONFIG="[WireGuardPeer]\n"
+    CONFIG+="# ${comment:-(no comment)}\n"
+    CONFIG+="# Added by ${SUDO_USER:-${USER}} at $(date +%F)\n"
+    CONFIG+="PublicKey = ${pubkey}\n"
+    CONFIG+="AllowedIPs = ${allowedips}\n"
+    
+    echo -e "\n${CONFIG}"
+    echo -n "Add this configuration to ${NETDEV}? [Y/n] "
+    read add
+
+    if [[ -z "${add}" || "${add}" == "Y" || "${add}" == "y" ]]; then
+        echo -e "${CONFIG}" >> "${NETDEV}"
+        echo -n "OK. "
+    fi
+
+    INTERFACE=$(awk '/Name = /{print $3}' ${NETDEV})
+
+    echo -n "Add this configuration to running interface ${INTERFACE}? [Y/n] "
+    read add
+
+    if [[ -z "${add}" || "${add}" == "Y" || "${add}" == "y" ]]; then
+        wg set ${INTERFACE} peer ${pubkey} allowed-ips ${allowedips}
+        echo -n "OK. "
+    fi
+}
+
+if [[ ! $UID -eq 0 ]]; then
+    echo "Privilege elevation..." >&2
+    sudo $0 $@
+    exit $?
+fi
+
+DEFAULT_NETDEV=$(ls /etc/systemd/network/*.netdev | grep -E 'wg|wireguard')
+NETDEV=${1:-${DEFAULT_NETDEV}}
+
+echo "Add WireGuard peer(s) to ${NETDEV##*/}"
+
+cont="y"
+while [[ "${cont}" == "y" || "${cont}" == "Y" ]]; do
+    add_peer
+    echo -n "Add another peer? [y/N] "
+    read cont
+done
