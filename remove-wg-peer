@@ -1,4 +1,8 @@
 #!/bin/bash
+# Interactively remove a peer from a WireGuard configuration
+# This script is build for systemd-networkd's netdev-files,
+# but should be easily convertible for wg-quick
+#   created by Eicke Herbertz, 2020
 
 remove_peer() {
     echo -n "Enter PublicKey: "
