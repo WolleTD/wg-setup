@@ -30,7 +30,7 @@ remove_peer() {
         read del
 
         if [[ "${del}" == "Y" || "${del}" == "y" ]]; then
-            wg set ${INTERFACE} peer ${pubkey} remove
+            wg set ${INTERFACE} peer ${peer} remove
             echo -n "OK. "
         fi
     else
