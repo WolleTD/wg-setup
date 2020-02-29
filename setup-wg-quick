@@ -18,8 +18,8 @@ if ! command -v wg >/dev/null; then
     exit 1
 fi
 
-WG_NAME="wg0"
-WG_CONF="/etc/wireguard/${WG_NAME}.conf"
+WG_NAME=${WG_NAME:-wg0}
+WG_CONF=${WG_CONF:-/etc/wireguard/${WG_NAME}.conf}
 
 WG_NET=${WG_NET:-172.16.0.0}
 WG_CIDR=${WG_CIDR:-24}

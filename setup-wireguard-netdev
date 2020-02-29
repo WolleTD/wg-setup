@@ -19,10 +19,11 @@ if ! command -v wg >/dev/null; then
     exit 1
 fi
 
-WG_NAME="wg0"
-BASENAME="90-wireguard"
-WG_NETDEV="/etc/systemd/network/${BASENAME}.netdev"
-WG_NETWORK="/etc/systemd/network/${BASENAME}.network"
+WG_NAME=${WG_NAME:-wg0}
+WG_BASENAME=${WG_BASENAME:-90-wireguard}
+WG_NETDEV=${WG_NETDEV:-/etc/systemd/network/${WG_BASENAME}.netdev}
+WG_NETWORK=${WG_NETWORK:-/etc/systemd/network/${WG_BASENAME}.network}
+WG_DESC=${WG_DESC:-WireGuard VPN}
 
 WG_NET=${WG_NET:-172.16.0.0}
 WG_CIDR=${WG_CIDR:-24}

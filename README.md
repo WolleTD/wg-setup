@@ -23,6 +23,19 @@ sudo -E ./setup-wg-quick $IP_ADDRESS
 The `$IP_ADDRESS` is expected without CIDR suffix. The required server peer entry is display
 at the end. VPN done.
 
+Other variables rarely need customization, these are their defaults:
+
+  - `WG_NAME = wg0`
+
+wg-quick:
+  - `WG_CONF = /etc/wireguard/${WG_NAME}.conf`
+
+wireguard-netdev:
+  - `WG_BASENAME = 90-wireguard`
+  - `WG_NETDEV = /etc/systemd/network/${WG_BASENAME}.netdev`
+  - `WG_NETWORK = /etc/systemd/network/${WG_BASENAME}.network`
+  - `WG_DESC = WireGuard VPN` (Description for netdev)
+
 You could even add the installation itself to the scripts. While WireGuard will be in kernel
 5.6, some of us will probably want VPN connections to older devices for quite some time.
 
