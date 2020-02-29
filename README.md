@@ -23,6 +23,20 @@ sudo -E ./setup-wg-quick $IP_ADDRESS
 The `$IP_ADDRESS` is expected without CIDR suffix. The required server peer entry is display
 at the end. VPN done.
 
+##### Security
+
+Be careful executing software from GitHub as root. Read all the code you are going to execute
+and please verify signatures if you download the script just-in-time.
+
+```bash
+gpg --recv-keys FB9DA662
+curl -O https://raw.githubusercontent.com/WolleTD/WireGuard-scripts/$ref/setup-wg-quick
+curl -O https://raw.githubusercontent.com/WolleTD/WireGuard-scripts/$ref/setup-wg-quick.sig
+gpg --verify setup-wg-quick.sig && chmod +x setup-wg-quick
+```
+
+---
+
 Other variables rarely need customization, these are their defaults:
 
   - `WG_NAME = wg0`
