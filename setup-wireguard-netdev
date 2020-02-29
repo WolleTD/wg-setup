@@ -19,9 +19,15 @@ if ! command -v wg >/dev/null; then
     exit 1
 fi
 
+WG_NAME="wg0"
 BASENAME="90-wireguard"
 WG_NETDEV="/etc/systemd/network/${BASENAME}.netdev"
 WG_NETWORK="/etc/systemd/network/${BASENAME}.network"
+
+WG_NET=${WG_NET:-172.16.0.0}
+WG_CIDR=${WG_CIDR:-24}
+WG_PUBKEY=${WG_PUBKEY:-YOUR_SERVERS_PUBLIC_KEY}
+WG_ENDPOINT=${WG_ENDPOINT:-vpn.example.com:12345}
 
 IP_ADDRESS=$1
 
@@ -31,15 +37,15 @@ PUBLIC_KEY="$(wg pubkey <<<${PRIVATE_KEY})"
 
 cat > "${WG_NETWORK}" <<EOF
 [Match]
-Name = wg0
+Name = ${WG_NAME}
 
 [Network]
-Address = ${IP_ADDRESS}/X
+Address = ${IP_ADDRESS}/${WG_CIDR}
 EOF
 
 cat > "${WG_NETDEV}" <<EOF
 [NetDev]
-Name = wg0
+Name = ${WG_NAME}
 Kind = wireguard
 Description = WireGuard VPN
 
@@ -47,9 +53,9 @@ Description = WireGuard VPN
 PrivateKey = ${PRIVATE_KEY}
 
 [WireGuardPeer]
-PublicKey = YOUR_SERVERS_PUBLIC_KEY
-AllowedIPs = A.B.C.D/X
-Endpoint = vpn.example.com:12345
+PublicKey = ${WG_PUBKEY}
+AllowedIPs = ${WG_NET}/${WG_CIDR}
+Endpoint = ${WG_ENDPOINT}
 PersistentKeepalive = 25
 EOF
 

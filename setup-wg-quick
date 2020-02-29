@@ -21,6 +21,11 @@ fi
 WG_NAME="wg0"
 WG_CONF="/etc/wireguard/${WG_NAME}.conf"
 
+WG_NET=${WG_NET:-172.16.0.0}
+WG_CIDR=${WG_CIDR:-24}
+WG_PUBKEY=${WG_PUBKEY:-YOUR_SERVERS_PUBLIC_KEY}
+WG_ENDPOINT=${WG_ENDPOINT:-vpn.example.com:12345}
+
 IP_ADDRESS=$1
 
 # Generate keys
@@ -31,12 +36,12 @@ PUBLIC_KEY="$(wg pubkey <<<${PRIVATE_KEY})"
 cat > "${WG_CONF}" <<EOF
 [Interface]
 PrivateKey = ${PRIVATE_KEY}
-Address = ${IP_ADDRESS}/X
+Address = ${IP_ADDRESS}/${WG_CIDR}
 
 [Peer]
-PublicKey = YOUR_SERVERS_PUBLIC_KEY
-AllowedIPs = A.B.C.D/X
-Endpoint = vpn.example.com:12345
+PublicKey = ${WG_PUBKEY}
+AllowedIPs = ${WG_NET}/${WG_CIDR}
+Endpoint = ${WG_ENDPOINT}
 PersistentKeepalive = 25
 EOF
 
