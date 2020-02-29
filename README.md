@@ -10,9 +10,18 @@ configuration files.
 
 ### `setup-*`
 
-Small templates to quickly setup WireGuard on clients. Replace all the placeholders in the
-template with your actual server configuration, run the scripts like
-`setup-wg-quick $IP_ADDRESS` and add the new client to the server configuration. VPN done.
+Small templates to quickly setup WireGuard on clients. At least `WG_PUBKEY` and `WG_ENDPOINT`
+have to be set to get a working result. The default network is `172.16.0.0/24` and can be
+adjusted by setting `WG_NET` and `WG_CIDR` accordingly. You need to run `sudo` with the `-E`
+flag to preserve the set environment variables. Example:
+
+```bash
+export WG_PUBKEY="<pubkey>" WG_ENDPOINT="vpn.example.com:12345" WG_NET=172.16.25.0
+sudo -E ./setup-wg-quick $IP_ADDRESS
+```
+
+The `$IP_ADDRESS` is expected without CIDR suffix. The required server peer entry is display
+at the end. VPN done.
 
 You could even add the installation itself to the scripts. While WireGuard will be in kernel
 5.6, some of us will probably want VPN connections to older devices for quite some time.
