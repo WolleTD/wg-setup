@@ -19,7 +19,7 @@ if ! command -v wg >/dev/null; then
 fi
 
 WG_NAME="wg0"
-WG_CONF="${WG_NAME}.conf"
+WG_CONF="/etc/wireguard/${WG_NAME}.conf"
 
 IP_ADDRESS=$1
 
