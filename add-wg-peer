@@ -20,17 +20,17 @@ add_peer() {
     echo -n "Name: "
     read name
 
-    test_input "Name" "# " "${name}" || return
+    test_input "Name" "# " "${name}" || return 0
 
     echo -n "PublicKey: "
     read pubkey
 
-    test_input "PublicKey" "PublicKey = " "${pubkey}" || return
+    test_input "PublicKey" "PublicKey = " "${pubkey}" || return 0
 
     echo -n "AllowedIPs (including prefix length): "
     read allowedips
 
-    test_input "AllowedIPs" "AllowedIPs = " "${allowedips}" || return
+    test_input "AllowedIPs" "AllowedIPs = " "${allowedips}" || return 0
 
     CONFIG="[WireGuardPeer]\n"
     CONFIG+="# ${name}\n"
