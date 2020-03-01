@@ -29,7 +29,7 @@ run_test() {
         echo "Test ${test} failed: Exit code $res doesn't match expected exit code $expres!"
         error=1
     fi
-    regexp=$(<${test}.infile)
+    regexp=""
     [[ -f ${test}.expected ]] && regexp=$(<${test}.expected)
     if [[ ! "$(<${tmpdir}/infile)" =~ ^${regexp}$ ]]; then
         echo "Test ${test} failed: Output file doesn't match expectation!"
