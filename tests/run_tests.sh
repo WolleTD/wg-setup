@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -e
 
 run_test() {
     local test=$1
@@ -61,4 +61,8 @@ export WG_TEST=1
 export PATH=$(realpath ..):${PATH}
 export LANG=en_US.UTF-8
 
-run_test add-wg-peer/interactive
+run_test add-wg-peer/interactive-success
+run_test add-wg-peer/interactive-error-abort
+run_test add-wg-peer/interactive-error-name
+run_test add-wg-peer/interactive-error-pubkey
+run_test add-wg-peer/interactive-error-allowedips
