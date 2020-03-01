@@ -5,8 +5,18 @@
 #   created by Eicke Herbertz, 2020
 
 add_peer() {
-    echo -n "Name/Comment: "
-    read comment
+    echo -n "Name: "
+    read name
+
+    if [[ -z "${name}" ]]; then
+        echo "Name cannot be empty!"
+        return
+    fi
+
+    if grep -q "# ${name}" "${NETDEV}"; then
+        echo "A peer with this name already exists!"
+        return
+    fi
 
     echo -n "PublicKey: "
     read pubkey
@@ -35,7 +45,7 @@ add_peer() {
     fi
 
     CONFIG="[WireGuardPeer]\n"
-    CONFIG+="# ${comment:-(no comment)}\n"
+    CONFIG+="# ${name}\n"
     CONFIG+="# Added by ${SUDO_USER:-${USER}} at $(date +%F)\n"
     CONFIG+="PublicKey = ${pubkey}\n"
     CONFIG+="AllowedIPs = ${allowedips}\n"
