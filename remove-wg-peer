@@ -48,7 +48,7 @@ if [[ ! $UID -eq 0 ]]; then
     exit $?
 fi
 
-DEFAULT_NETDEV=$(ls /etc/systemd/network/*.netdev | grep -E 'wg|wireguard')
+DEFAULT_NETDEV=$(ls /etc/systemd/network/*.netdev | grep -E 'wg|wireguard' | head -1)
 NETDEV=${1:-${DEFAULT_NETDEV}}
 
 echo "Remove WireGuard peer(s) from ${NETDEV##*/}"
