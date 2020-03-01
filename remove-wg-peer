@@ -69,6 +69,12 @@ usage() {
     exit 0
 }
 
+if [[ $UID -ne 0 && ! $WG_TEST ]]; then
+    echo "Privilege elevation..." >&2
+    sudo $0 $@
+    exit $?
+fi
+
 DEFAULT_NETDEV=${WG_TEST_FILE:-$(ls /etc/systemd/network/*.netdev | \
                                  grep -E 'wg|wireguard' | head -1)}
 NETDEV=${DEFAULT_NETDEV}
@@ -104,12 +110,6 @@ done
 
 if [[ ${NOCONFIRM} == "y" && -z "${PEER}" ]]; then
     echo "Warning: -y has no effect in interactive mode!" >&2
-fi
-
-if [[ $UID -ne 0 && ! $WG_TEST ]]; then
-    echo "Privilege elevation..." >&2
-    sudo $0 $@
-    exit $?
 fi
 
 if [[ -z "${PEER}" ]]; then
