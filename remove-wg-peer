@@ -75,38 +75,44 @@ if [[ $UID -ne 0 && ! $WG_TEST ]]; then
     exit $?
 fi
 
+# use enhanced getopt
+OPTS=f:yh
+LOPTS=file:,noconfirm,help
+PARSED_OPTS=$(getopt -o $OPTS -l $LOPTS -n "$0" -- "$@")
+eval set -- "$PARSED_OPTS"
+
+# set defaults
 DEFAULT_NETDEV=${WG_TEST_FILE:-$(ls /etc/systemd/network/*.netdev | \
                                  grep -E 'wg|wireguard' | head -1)}
 NETDEV=${DEFAULT_NETDEV}
 NOCONFIRM=n
 
-while [[ -n $1 ]]; do
+while [[ "$1" != "--" ]]; do
     case $1 in
-    -f)
-        if [[ -z $2 ]]; then
-            echo "ERROR: Missing argument for $1" >&2
-            exit 1
-        fi
-        NETDEV=$2
-        shift; shift
+    -f|--file)
+        NETDEV="$2"
+        shift 2
         ;;
-    -y)
+    -y|--noconfirm)
         NOCONFIRM=y
         shift
         ;;
-    -h)
+    -h|--help)
         usage
         ;;
     *)
-        if [[ -n "${PEER}" ]]; then
-            echo "ERROR: Too many arguments!" >&2
-            exit 1
-        fi
-        PEER=$1
-        shift
+        echo "Programming error" >&2
+        exit 1
         ;;
     esac
 done
+
+# $1 is --, $2 is peer
+if [[ $# -gt 2 ]]; then
+    echo "Error: Too many arguments!" >&2
+    exit 1
+fi
+PEER=$2
 
 if [[ ${NOCONFIRM} == "y" && -z "${PEER}" ]]; then
     echo "Warning: -y has no effect in interactive mode!" >&2
