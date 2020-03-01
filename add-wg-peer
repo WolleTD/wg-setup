@@ -64,7 +64,8 @@ if [[ $UID -ne 0 && ! $WG_TEST ]]; then
     exit $?
 fi
 
-DEFAULT_NETDEV=$(ls /etc/systemd/network/*.netdev | grep -E 'wg|wireguard' | head -1)
+DEFAULT_NETDEV=${WG_TEST_FILE:-$(ls /etc/systemd/network/*.netdev | \
+                                 grep -E 'wg|wireguard' | head -1)}
 NETDEV=${1:-${DEFAULT_NETDEV}}
 
 echo "Add WireGuard peer(s) to ${NETDEV##*/}"

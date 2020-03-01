@@ -12,16 +12,16 @@ run_test() {
 
     if [[ -f ${test}.infile ]]; then
         cp ${test}.infile ${tmpdir}/infile
-        test_file=${tmpdir}/infile
+        export WG_TEST_FILE=${tmpdir}/infile
     else
         echo "Error: testing without testfile is a stub!" >&2
         exit 1
     fi
     
     if [[ $has_stdin -eq 1 ]]; then
-        ${command} "${test_file}" "${args}" <${test}.stdin 1>${tmpdir}/stdout 2>${tmpdir}/stderr
+        ${command} "${args}" <${test}.stdin 1>${tmpdir}/stdout 2>${tmpdir}/stderr
     else
-        ${command} "${test_file}" "${args}" 1>${tmpdir}/stdout 2>${tmpdir}/stderr
+        ${command} "${args}" 1>${tmpdir}/stdout 2>${tmpdir}/stderr
     fi
     res=$?
     [[ -f ${test}.result ]] && expres=$(<${test}.result)
