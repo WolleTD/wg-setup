@@ -19,11 +19,11 @@ run_test() {
     fi
     
     if [[ $has_stdin -eq 1 ]]; then
-        ${command} "${args}" <${test}.stdin 1>${tmpdir}/stdout 2>${tmpdir}/stderr
+        ! ${command} "${args}" <${test}.stdin 1>${tmpdir}/stdout 2>${tmpdir}/stderr
     else
-        ${command} "${args}" 1>${tmpdir}/stdout 2>${tmpdir}/stderr
+        ! ${command} "${args}" 1>${tmpdir}/stdout 2>${tmpdir}/stderr
     fi
-    res=$?
+    res=${PIPESTATUS[0]}
     [[ -f ${test}.result ]] && expres=$(<${test}.result)
     if [[ $res -ne $expres ]]; then
         echo "Test ${test} failed: Exit code $res doesn't match expected exit code $expres!"
