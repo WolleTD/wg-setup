@@ -42,7 +42,7 @@ remove_peer() {
     fi
 }
 
-if [[ ! $UID -eq 0 ]]; then
+if [[ $UID -ne 0 && ! $WG_TEST ]]; then
     echo "Privilege elevation..." >&2
     sudo $0 $@
     exit $?
