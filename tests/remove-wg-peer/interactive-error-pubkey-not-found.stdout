@@ -1,0 +1,3 @@
+Remove WireGuard peer\(s\) from infile
+Enter PublicKey: No peer with this PublicKey was found!
+Remove another peer\? \[y/N\] 

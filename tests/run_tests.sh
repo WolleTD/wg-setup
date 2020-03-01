@@ -69,3 +69,6 @@ run_test add-wg-peer/interactive-error-no-allowedips
 run_test add-wg-peer/interactive-error-name-exists
 run_test add-wg-peer/interactive-error-pubkey-exists
 run_test add-wg-peer/interactive-error-allowedips-exists
+run_test remove-wg-peer/interactive-success
+run_test remove-wg-peer/interactive-error-pubkey-not-found
+run_test remove-wg-peer/interactive-error-abort
