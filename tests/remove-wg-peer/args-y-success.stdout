@@ -1,0 +1,6 @@
+\[WireGuardPeer\]
+# peer2
+# Added by wolle at 2020-03-01
+PublicKey = iCJSbobpCRHCG2/WP9D1/viGlv\+WrNpWtd1XkRzyrFs=
+AllowedIPs = 172\.16\.1\.2/32
+

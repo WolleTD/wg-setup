@@ -19,9 +19,9 @@ run_test() {
     fi
     
     if [[ $has_stdin -eq 1 ]]; then
-        ! ${command} "${args}" <${test}.stdin 1>${tmpdir}/stdout 2>${tmpdir}/stderr
+        ! ${command} ${args} <${test}.stdin 1>${tmpdir}/stdout 2>${tmpdir}/stderr
     else
-        ! ${command} "${args}" 1>${tmpdir}/stdout 2>${tmpdir}/stderr
+        ! ${command} ${args} 1>${tmpdir}/stdout 2>${tmpdir}/stderr
     fi
     res=${PIPESTATUS[0]}
     [[ -f ${test}.result ]] && expres=$(<${test}.result)
@@ -77,5 +77,6 @@ run_test remove-wg-peer/interactive-success-malformed
 run_test remove-wg-peer/interactive-success-extra
 
 run_test remove-wg-peer/args-success
+run_test remove-wg-peer/args-y-success
 run_test remove-wg-peer/args-error-pubkey-not-found
 run_test remove-wg-peer/args-error-abort
