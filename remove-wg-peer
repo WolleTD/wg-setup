@@ -115,7 +115,7 @@ fi
 PEER=$2
 
 if [[ ${NOCONFIRM} == "y" && -z "${PEER}" ]]; then
-    echo "Warning: -y has no effect in interactive mode!" >&2
+    echo "Warning: -y has no effect in interactive mode!"
 fi
 
 if [[ -z "${PEER}" ]]; then

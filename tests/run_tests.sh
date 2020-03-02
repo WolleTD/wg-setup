@@ -71,6 +71,7 @@ run_test add-wg-peer/interactive-error-pubkey-exists
 run_test add-wg-peer/interactive-error-allowedips-exists
 
 run_test remove-wg-peer/interactive-success
+run_test remove-wg-peer/interactive-y-success
 run_test remove-wg-peer/interactive-error-pubkey-not-found
 run_test remove-wg-peer/interactive-error-abort
 run_test remove-wg-peer/interactive-success-malformed
