@@ -6,7 +6,6 @@
 
 remove_peer() {
     local peer="$1"
-    local yes="$2"
 
     # Always print portion that is removed to stdout
     if gawk -v pk="${peer}" \
@@ -16,8 +15,8 @@ remove_peer() {
         END { exit !fs }' \
         ${NETDEV}
     then
-        if [[ "${yes}" != "yes" ]]; then
-            echo -n "Really remove this peer from ${NETDEV##*/}? [y/N] "
+        if [[ "${YES}" != "yes" ]]; then
+            echo -n "Remove this configuration from ${NETDEV}? [y/N] "
             read del
             [[ "${del}" == "y" || "${del}" == "Y" ]] || return 1
         fi
@@ -45,12 +44,12 @@ remove_peer() {
 }
 
 usage() {
-    echo "Usage: remove-wg-peer [-f file] [[-y] [-n] [peer]]"
-    echo "    -f file   systemd .netdev file to edit"
-    echo "    -y        no confirmation required"
-    echo "    peer      the PublicKey of the peer to remove"
+    echo "Usage: remove-wg-peer [-y] [-f <file>] [public-key]"
+    echo "    -f <file>   systemd .netdev file to edit"
+    echo "    -y          no confirmation required"
+    echo "    public-key  the PublicKey of the peer to remove"
     echo "  Without peer passed, PublicKey will be queried interactively."
-    exit 0
+    exit $1
 }
 
 if [[ $UID -ne 0 && ! $WG_TEST ]]; then
@@ -69,7 +68,7 @@ eval set -- "$PARSED_OPTS"
 DEFAULT_NETDEV=${WG_TEST_FILE:-$(ls /etc/systemd/network/*.netdev | \
                                  grep -E 'wg|wireguard' | head -1)}
 NETDEV=${DEFAULT_NETDEV}
-NOCONFIRM=n
+YES=n
 
 while [[ "$1" != "--" ]]; do
     case $1 in
@@ -78,7 +77,7 @@ while [[ "$1" != "--" ]]; do
         shift 2
         ;;
     -y|--noconfirm)
-        NOCONFIRM=yes
+        YES=yes
         shift
         ;;
     -h|--help)
@@ -94,22 +93,22 @@ done
 # $1 is --, $2 is peer
 if [[ $# -gt 2 ]]; then
     echo "Error: Too many arguments!" >&2
-    exit 1
+    usage 1
 fi
 PEER=$2
 
 # go interactive if no peer provided
 if [[ -z "${PEER}" ]]; then
-    echo "Remove WireGuard peer(s) from ${NETDEV##*/}"
+    echo "Remove WireGuard peer(s) from ${NETDEV}"
 
     cont="y"
     while [[ "${cont}" == "y" || "${cont}" == "Y" ]]; do
         echo -n "Enter PublicKey: "
         read peer
-        ! remove_peer "${peer}" ${NOCONFIRM} 2>&1
+        ! remove_peer "${peer}" 2>&1
         echo -n "Remove another peer? [y/N] "
         read cont
     done
 else
-    remove_peer "${PEER}" ${NOCONFIRM}
+    remove_peer "${PEER}"
 fi
