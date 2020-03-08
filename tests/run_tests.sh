@@ -62,6 +62,7 @@ export PATH=$(realpath ..):${PATH}
 export LANG=en_US.UTF-8
 
 run_test add-wg-peer/interactive-success
+run_test add-wg-peer/interactive-y-success
 run_test add-wg-peer/interactive-error-abort
 run_test add-wg-peer/interactive-error-no-name
 run_test add-wg-peer/interactive-error-no-pubkey
@@ -69,6 +70,14 @@ run_test add-wg-peer/interactive-error-no-allowedips
 run_test add-wg-peer/interactive-error-name-exists
 run_test add-wg-peer/interactive-error-pubkey-exists
 run_test add-wg-peer/interactive-error-allowedips-exists
+
+run_test add-wg-peer/args-success
+run_test add-wg-peer/args-y-success
+run_test add-wg-peer/args-error-abort
+run_test add-wg-peer/args-error-too-few-arguments
+run_test add-wg-peer/args-error-name-exists
+run_test add-wg-peer/args-error-pubkey-exists
+run_test add-wg-peer/args-error-allowedips-exists
 
 run_test remove-wg-peer/interactive-success
 run_test remove-wg-peer/interactive-y-success

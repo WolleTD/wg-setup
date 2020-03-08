@@ -21,17 +21,17 @@ add_peer() {
     local peer="$2"
     local allowed_ips="$3"
 
-    test_input "Name" "# " "${name}"
-    test_input "PublicKey" "PublicKey = " "${pubkey}"
-    test_input "AllowedIPs" "AllowedIPs = " "${allowedips}"
+    test_input "Name" "# " "${name}" 1>&2
+    test_input "PublicKey" "PublicKey = " "${peer}" 1>&2
+    test_input "AllowedIPs" "AllowedIPs = " "${allowed_ips}" 1>&2
 
     CONFIG="[WireGuardPeer]\n"
     CONFIG+="# ${name}\n"
     CONFIG+="# Added by ${SUDO_USER:-${USER}} at $(date +%F)\n"
-    CONFIG+="PublicKey = ${pubkey}\n"
-    CONFIG+="AllowedIPs = ${allowedips}\n"
-    
-    echo -e "\n${CONFIG}"
+    CONFIG+="PublicKey = ${peer}\n"
+    CONFIG+="AllowedIPs = ${allowed_ips}\n"
+
+    echo -e "${CONFIG}"
 
     if [[ "${YES}" != "yes" ]]; then
         echo -n "Add this configuration to ${NETDEV}? [Y/n] "
@@ -46,7 +46,7 @@ add_peer() {
 
     # Check if interface is non-zero and actually existing
     if [[ ${INTERFACE} && -e /sys/class/net/${INTERFACE} ]]; then
-        wg set ${INTERFACE} peer ${pubkey} allowed-ips ${allowedips}
+        wg set ${INTERFACE} peer ${peer} allowed-ips ${allowed_ips}
     fi
 }
 
@@ -128,6 +128,7 @@ if [[ -z "${PEER}" ]]; then
         read allowedips
         test_input "AllowedIPs" "AllowedIPs = " "${allowedips}" || continue
 
+        echo
         ! add_peer "${name}" "${pubkey}" "${allowedips}" 2>&1
         echo -n "Add another peer? [y/N] "
         read cont
