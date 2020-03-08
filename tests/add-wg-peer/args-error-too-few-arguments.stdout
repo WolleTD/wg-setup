@@ -3,6 +3,6 @@ Usage: add-wg-peer \[-y\] \[-f <file>\] \[<name> <public-key> <allowed-ips>\]
     -y              no confirmation required
     <name>          name of the peer - requires a valid hostname
     <public-key>    the PublicKey of the new peer
-    <allowed-ips>   AllowedIPs of the new peer \(allows shortcut for /32 CIDR\)
+    <allowed-ips>   AllowedIPs of the new peer
   Without peer information, PublicKey and AllowedIPs will be queried interactively\.
 

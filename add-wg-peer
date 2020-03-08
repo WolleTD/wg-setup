@@ -56,7 +56,7 @@ usage() {
     echo "    -y              no confirmation required"
     echo "    <name>          name of the peer - requires a valid hostname"
     echo "    <public-key>    the PublicKey of the new peer"
-    echo "    <allowed-ips>   AllowedIPs of the new peer (allows shortcut for /32 CIDR)"
+    echo "    <allowed-ips>   AllowedIPs of the new peer"
     echo "  Without peer information, PublicKey and AllowedIPs will be queried interactively."
     exit $1
 }
