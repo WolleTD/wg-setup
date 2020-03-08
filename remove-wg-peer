@@ -1,23 +1,14 @@
-#!/bin/bash
+#!/bin/bash -e
 # Interactively remove a peer from a WireGuard configuration
 # This script is build for systemd-networkd's netdev-files,
 # but should be easily convertible for wg-quick
 #   created by Eicke Herbertz, 2020
 
 remove_peer() {
-    if [[ -z "$1" ]]; then
-        echo -n "Enter PublicKey: "
-        read peer
-    else
-        peer="$1"
-        ni=y
-    fi
+    local peer="$1"
+    local yes="$2"
 
-    if [[ "$2" == "y" ]]; then
-        del=y
-        noconf=y
-    fi
-
+    # Always print portion that is removed to stdout
     if gawk -v pk="${peer}" \
         '{ l[++n]=$0 }
         /^PublicKey/ { if($3==pk){ f=1;fs=1 } }
@@ -25,45 +16,38 @@ remove_peer() {
         END { exit !fs }' \
         ${NETDEV}
     then
-        if [[ -z ${noconf} ]]; then
+        if [[ "${yes}" != "yes" ]]; then
             echo -n "Really remove this peer from ${NETDEV##*/}? [y/N] "
             read del
+            [[ "${del}" == "y" || "${del}" == "Y" ]] || return 1
         fi
 
-        if [[ "${del}" == "Y" || "${del}" == "y" ]]; then
-            gawk -i inplace -v pk="${peer}" \
-                '{ l[++n]=$0 }
-                /^PublicKey/ { if($3==pk){ f=1;fs=1 } }
-                /^$/ { if(!f){ for(i=1;i<=n;i++){ print l[i] } } delete l;n=0;f=0 }
-                END { exit !fs }' \
-                ${NETDEV}
-            [[ $ni ]] || echo -n "OK. "
+        # Remove from $NETDEV
+        gawk -i inplace -v pk="${peer}" \
+            '{ l[++n]=$0 }
+            /^PublicKey/ { if($3==pk){ f=1;fs=1 } }
+            /^$/ { if(!f){ for(i=1;i<=n;i++){ print l[i] } } delete l;n=0;f=0 }
+            END { exit !fs }' \
+            ${NETDEV}
+
+        # Find interface in $NETDEV
+        local interface=$(awk '/Name = /{print $3}' ${NETDEV})
+
+        # Check if interface is non-zero and actually existing
+        if [[ ${INTERFACE} && -e /sys/class/net/${INTERFACE} ]]; then
+            wg set ${INTERFACE} peer "${peer}" remove
         fi
-
-        INTERFACE=$(awk '/Name = /{print $3}' ${NETDEV})
-
-        if [[ ${INTERFACE} ]]; then
-            if [[ -z ${noconf} ]]; then
-                echo -n "Remove this configuration from running interface ${INTERFACE}? [y/N] "
-                read del
-            fi
-
-            if [[ "${del}" == "Y" || "${del}" == "y" ]]; then
-                wg set ${INTERFACE} peer ${peer} remove
-                [[ $ni ]] || echo -n "OK. "
-            fi
-        fi
-        [[ $ni ]] && exit 0
+        return 0
     else
-        echo "No peer with this PublicKey was found!"
-        [[ $ni ]] && exit 1
+        echo "No peer with this PublicKey was found!" >&2
+        return 1
     fi
 }
 
 usage() {
     echo "Usage: remove-wg-peer [-f file] [[-y] [-n] [peer]]"
     echo "    -f file   systemd .netdev file to edit"
-    echo "    -y        no confirmation, full non-interactive"
+    echo "    -y        no confirmation required"
     echo "    peer      the PublicKey of the peer to remove"
     echo "  Without peer passed, PublicKey will be queried interactively."
     exit 0
@@ -94,7 +78,7 @@ while [[ "$1" != "--" ]]; do
         shift 2
         ;;
     -y|--noconfirm)
-        NOCONFIRM=y
+        NOCONFIRM=yes
         shift
         ;;
     -h|--help)
@@ -114,16 +98,15 @@ if [[ $# -gt 2 ]]; then
 fi
 PEER=$2
 
-if [[ ${NOCONFIRM} == "y" && -z "${PEER}" ]]; then
-    echo "Warning: -y has no effect in interactive mode!"
-fi
-
+# go interactive if no peer provided
 if [[ -z "${PEER}" ]]; then
     echo "Remove WireGuard peer(s) from ${NETDEV##*/}"
 
     cont="y"
     while [[ "${cont}" == "y" || "${cont}" == "Y" ]]; do
-        remove_peer
+        echo -n "Enter PublicKey: "
+        read peer
+        ! remove_peer "${peer}" ${NOCONFIRM} 2>&1
         echo -n "Remove another peer? [y/N] "
         read cont
     done
