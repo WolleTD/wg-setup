@@ -42,11 +42,12 @@ add_peer() {
     echo -e "${CONFIG}" >> "${NETDEV}"
 
     # Find interface in $NETDEV
-    local interface=$(awk '/Name = /{print $3}' ${NETDEV})
+    local interface
+    interface=$(awk '/Name = /{print $3}' "${NETDEV}")
 
     # Check if interface is non-zero and actually existing
-    if [[ ${INTERFACE} && -e /sys/class/net/${INTERFACE} ]]; then
-        wg set ${INTERFACE} peer ${peer} allowed-ips ${allowed_ips}
+    if [[ ${interface} && -e /sys/class/net/${interface} ]]; then
+        wg set "${interface}" peer "${peer}" allowed-ips "${allowed_ips}"
     fi
 }
 
