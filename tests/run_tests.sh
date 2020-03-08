@@ -61,32 +61,32 @@ export WG_TEST=1
 export PATH=$(realpath ..):${PATH}
 export LANG=en_US.UTF-8
 
-run_test add-wg-peer/interactive-success
-run_test add-wg-peer/interactive-y-success
-run_test add-wg-peer/interactive-error-abort
-run_test add-wg-peer/interactive-error-no-name
-run_test add-wg-peer/interactive-error-no-pubkey
-run_test add-wg-peer/interactive-error-no-allowedips
-run_test add-wg-peer/interactive-error-name-exists
-run_test add-wg-peer/interactive-error-pubkey-exists
-run_test add-wg-peer/interactive-error-allowedips-exists
+run_test wg-add-peer/interactive-success
+run_test wg-add-peer/interactive-y-success
+run_test wg-add-peer/interactive-error-abort
+run_test wg-add-peer/interactive-error-no-name
+run_test wg-add-peer/interactive-error-no-pubkey
+run_test wg-add-peer/interactive-error-no-allowedips
+run_test wg-add-peer/interactive-error-name-exists
+run_test wg-add-peer/interactive-error-pubkey-exists
+run_test wg-add-peer/interactive-error-allowedips-exists
 
-run_test add-wg-peer/args-success
-run_test add-wg-peer/args-y-success
-run_test add-wg-peer/args-error-abort
-run_test add-wg-peer/args-error-too-few-arguments
-run_test add-wg-peer/args-error-name-exists
-run_test add-wg-peer/args-error-pubkey-exists
-run_test add-wg-peer/args-error-allowedips-exists
+run_test wg-add-peer/args-success
+run_test wg-add-peer/args-y-success
+run_test wg-add-peer/args-error-abort
+run_test wg-add-peer/args-error-too-few-arguments
+run_test wg-add-peer/args-error-name-exists
+run_test wg-add-peer/args-error-pubkey-exists
+run_test wg-add-peer/args-error-allowedips-exists
 
-run_test remove-wg-peer/interactive-success
-run_test remove-wg-peer/interactive-y-success
-run_test remove-wg-peer/interactive-error-pubkey-not-found
-run_test remove-wg-peer/interactive-error-abort
-run_test remove-wg-peer/interactive-success-malformed
-run_test remove-wg-peer/interactive-success-extra
+run_test wg-remove-peer/interactive-success
+run_test wg-remove-peer/interactive-y-success
+run_test wg-remove-peer/interactive-error-pubkey-not-found
+run_test wg-remove-peer/interactive-error-abort
+run_test wg-remove-peer/interactive-success-malformed
+run_test wg-remove-peer/interactive-success-extra
 
-run_test remove-wg-peer/args-success
-run_test remove-wg-peer/args-y-success
-run_test remove-wg-peer/args-error-pubkey-not-found
-run_test remove-wg-peer/args-error-abort
+run_test wg-remove-peer/args-success
+run_test wg-remove-peer/args-y-success
+run_test wg-remove-peer/args-error-pubkey-not-found
+run_test wg-remove-peer/args-error-abort

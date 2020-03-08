@@ -51,7 +51,7 @@ add_peer() {
 }
 
 usage() {
-    echo "Usage: add-wg-peer [-y] [-f <file>] [<name> <public-key> <allowed-ips>]"
+    echo "Usage: wg-add-peer [-y] [-f <file>] [<name> <public-key> <allowed-ips>]"
     echo "    -f <file>       systemd .netdev file to edit"
     echo "    -y              no confirmation required"
     echo "    <name>          name of the peer - requires a valid hostname"

@@ -1,12 +1,12 @@
 # WireGuard Scripts
 
-### `(add|remove)-wg-peer`
+### `wg-(add|remove)-peer`
 
 Scripts to interactively manage peers via systemd-`.netdev` files (and cli for the running
 interface). Change file lookup and `[WireGuardPeer]` to `[Peer]` to use with `wg-quick`
 configuration files.
 
-`remove-wg-peer` requires gawk >= 4.1.0 (it's seven years old, you probably have it).
+`wg-remove-peer` requires gawk >= 4.1.0 (it's seven years old, you probably have it).
 
 ### `setup-*`
 

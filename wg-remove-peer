@@ -44,7 +44,7 @@ remove_peer() {
 }
 
 usage() {
-    echo "Usage: remove-wg-peer [-y] [-f <file>] [public-key]"
+    echo "Usage: wg-remove-peer [-y] [-f <file>] [public-key]"
     echo "    -f <file>   systemd .netdev file to edit"
     echo "    -y          no confirmation required"
     echo "    public-key  the PublicKey of the peer to remove"
