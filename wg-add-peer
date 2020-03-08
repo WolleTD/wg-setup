@@ -35,7 +35,7 @@ add_peer() {
 
     if [[ "${YES}" != "yes" ]]; then
         echo -n "Add this configuration to ${NETDEV}? [Y/n] "
-        read add
+        read -r add
         [[ -z "${add}" || "${add}" == "y" || "${add}" == "Y" ]] || return 1
     fi
 
@@ -59,12 +59,12 @@ usage() {
     echo "    <public-key>    the PublicKey of the new peer"
     echo "    <allowed-ips>   AllowedIPs of the new peer"
     echo "  Without peer information, PublicKey and AllowedIPs will be queried interactively."
-    exit $1
+    exit "$1"
 }
 
 if [[ $UID -ne 0 && ! $WG_TEST ]]; then
     echo "Privilege elevation..." >&2
-    sudo $0 $@
+    sudo "$0" "$@"
     exit $?
 fi
 
@@ -75,8 +75,9 @@ PARSED_OPTS=$(getopt -o $OPTS -l $LOPTS -n "$0" -- "$@")
 eval set -- "$PARSED_OPTS"
 
 # set defaults
-DEFAULT_NETDEV=${WG_TEST_FILE:-$(ls /etc/systemd/network/*.netdev | \
-                                 grep -E 'wg|wireguard' | head -1)}
+#shellcheck disable=SC2010
+FIRST_NETDEV=$(ls /etc/systemd/network/*.netdev | grep -E 'wg|wireguard' | head -1)
+DEFAULT_NETDEV=${WG_TEST_FILE:-${FIRST_NETDEV}}
 NETDEV=${DEFAULT_NETDEV}
 YES=n
 
@@ -118,21 +119,21 @@ if [[ -z "${PEER}" ]]; then
     cont="y"
     while [[ "${cont}" == "y" || "${cont}" == "Y" ]]; do
         echo -n "Name: "
-        read name
+        read -r name
         test_input "Name" "# " "${name}" || continue
 
         echo -n "PublicKey: "
-        read pubkey
+        read -r pubkey
         test_input "PublicKey" "PublicKey = " "${pubkey}" || continue
 
         echo -n "AllowedIPs (including prefix length): "
-        read allowedips
+        read -r allowedips
         test_input "AllowedIPs" "AllowedIPs = " "${allowedips}" || continue
 
         echo
         ! add_peer "${name}" "${pubkey}" "${allowedips}" 2>&1
         echo -n "Add another peer? [y/N] "
-        read cont
+        read -r cont
     done
 else
     add_peer "${NAME}" "${PEER}" "${ALLOWED_IPS}"

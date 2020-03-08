@@ -13,11 +13,11 @@ remove_peer() {
         /^PublicKey/ { if($3==pk){ f=1;fs=1 } }
         /^$/ { if(f){ for(i=1;i<=n;i++){ print l[i] } } delete l;n=0;f=0 }
         END { exit !fs }' \
-        ${NETDEV}
+        "${NETDEV}"
     then
         if [[ "${YES}" != "yes" ]]; then
             echo -n "Remove this configuration from ${NETDEV}? [y/N] "
-            read del
+            read -r del
             [[ "${del}" == "y" || "${del}" == "Y" ]] || return 1
         fi
 
@@ -27,7 +27,7 @@ remove_peer() {
             /^PublicKey/ { if($3==pk){ f=1;fs=1 } }
             /^$/ { if(!f){ for(i=1;i<=n;i++){ print l[i] } } delete l;n=0;f=0 }
             END { exit !fs }' \
-            ${NETDEV}
+            "${NETDEV}"
 
         # Find interface in $NETDEV
         local interface
@@ -50,12 +50,12 @@ usage() {
     echo "    -y          no confirmation required"
     echo "    public-key  the PublicKey of the peer to remove"
     echo "  Without peer passed, PublicKey will be queried interactively."
-    exit $1
+    exit "$1"
 }
 
 if [[ $UID -ne 0 && ! $WG_TEST ]]; then
     echo "Privilege elevation..." >&2
-    sudo $0 $@
+    sudo "$0" "$@"
     exit $?
 fi
 
@@ -66,8 +66,9 @@ PARSED_OPTS=$(getopt -o $OPTS -l $LOPTS -n "$0" -- "$@")
 eval set -- "$PARSED_OPTS"
 
 # set defaults
-DEFAULT_NETDEV=${WG_TEST_FILE:-$(ls /etc/systemd/network/*.netdev | \
-                                 grep -E 'wg|wireguard' | head -1)}
+#shellcheck disable=SC2010
+FIRST_NETDEV=$(ls /etc/systemd/network/*.netdev | grep -E 'wg|wireguard' | head -1)
+DEFAULT_NETDEV=${WG_TEST_FILE:-${FIRST_NETDEV}}
 NETDEV=${DEFAULT_NETDEV}
 YES=n
 
@@ -105,10 +106,10 @@ if [[ -z "${PEER}" ]]; then
     cont="y"
     while [[ "${cont}" == "y" || "${cont}" == "Y" ]]; do
         echo -n "Enter PublicKey: "
-        read peer
+        read -r peer
         ! remove_peer "${peer}" 2>&1
         echo -n "Remove another peer? [y/N] "
-        read cont
+        read -r cont
     done
 else
     remove_peer "${PEER}"
