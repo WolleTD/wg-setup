@@ -78,7 +78,7 @@ eval set -- "$PARSED_OPTS"
 #shellcheck disable=SC2010
 FIRST_NETDEV=$(ls /etc/systemd/network/*.netdev | grep -E 'wg|wireguard' | head -1)
 DEFAULT_NETDEV=${WG_TEST_FILE:-${FIRST_NETDEV}}
-NETDEV=${DEFAULT_NETDEV}
+NETDEV=${NETDEV:-${DEFAULT_NETDEV}}
 YES=n
 
 while [[ "$1" != "--" ]]; do
