@@ -1,8 +1,0 @@
-Usage: wg-add-peer \[-y\] \[-f <file>\] \[<name> <public-key> <allowed-ips>\]
-    -f <file>       systemd \.netdev file to edit
-    -y              no confirmation required
-    <name>          name of the peer - requires a valid hostname
-    <public-key>    the PublicKey of the new peer
-    <allowed-ips>   AllowedIPs of the new peer
-  Without peer information, PublicKey and AllowedIPs will be queried interactively\.
-

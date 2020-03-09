@@ -1,3 +1,0 @@
-Add WireGuard peer\(s\) to /tmp/tmp\.[[:alnum:]]+/infile
-Name: PublicKey: AllowedIPs \(including prefix length\): A peer with this AllowedIPs already exists!
-Name: 

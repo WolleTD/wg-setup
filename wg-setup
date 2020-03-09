@@ -1,0 +1,353 @@
+#!/bin/bash -e
+# Interactively add a new peer to a WireGuard configuration
+# This script is build for systemd-networkd's netdev-files,
+# but should be easily convertible for wg-quick
+#   created by Eicke Herbertz, 2020
+#
+# Interactively remove a peer from a WireGuard configuration
+# This script is build for systemd-networkd's netdev-files,
+# but should be easily convertible for wg-quick
+#   created by Eicke Herbertz, 2020
+
+# This will test the target .netdev file for existing values. For "Name" as first
+# argument, the line "^# $2\$" is matched, otherwise "^$1 = $2\$" is matched.
+# For exammple "test_exists AllowedIPs 127.0.0.1" matches "^AllowedIPs = 127.0.0.1$"
+test_exists() {
+    key="$1 = "
+    [[ "$1" == "Name" ]] && key="# "
+    if grep -q "^${key}$2\$" "${NETDEV}"; then
+        echo "A peer with this $1 already exists!"
+        return 2
+    fi
+}
+
+# A valid hostname contains only letters, numbers, dashes and underscores
+test_name() {
+    if [[ ! "$1" =~ ^[A-Za-z0-9_-]+$ ]]; then
+        echo "Error: Not a valid hostname!"
+        return 1
+    fi
+    test_exists "Name" "$1"
+}
+
+# AllowedIPs, at least in theory, can contain multiple addresses separated
+# by a comma. Additionally, wg-setup supports defaulting to /32 suffix
+test_allowedips() {
+    if [[ ! "$1" =~ ^(([0-9]{1,3}\.){3}[0-9]{1,3}(/[0-9]{1,2})?,?)+$ ]]; then
+        echo "Error: Invalid AllowedIPs (<addr>[/cidr][,<addr>[/cidr][,...]])"
+        return 1
+    fi
+    test_exists "AllowedIPs" "$1"
+}
+
+# A WireGuard PublicKey consists of 43 random Base64 characters and a trailing '='
+test_publickey() {
+    if [[ ! "$1" =~ ^[A-Za-z0-9/+]{43}=$ ]]; then
+        echo "Error: PublicKey invalid!"
+        return 1
+    fi
+    test_exists "PublicKey" "$1"
+}
+
+# Inner function for cmd_add_peer
+add_peer() {
+    local name="$1"
+    local peer="$2"
+    local allowed_ips="$3"
+
+    # Add CIDR /32 to ip addresses without suffix
+    allowed_ips=$(echo "${allowed_ips}" | sed 's#\.\([0-9]\+\)\(,\|$\)#.\1/32\2#g')
+
+    test_name "${name}" 1>&2 || return $?
+    test_publickey "${peer}" 1>&2 || return $?
+    test_allowedips "${allowed_ips}" 1>&2 || return $?
+
+    CONFIG="[WireGuardPeer]\n"
+    CONFIG+="# ${name}\n"
+    CONFIG+="# Added by ${SUDO_USER:-${USER}} at $(date +%F)\n"
+    CONFIG+="PublicKey = ${peer}\n"
+    CONFIG+="AllowedIPs = ${allowed_ips}\n"
+
+    echo -e "${CONFIG}"
+
+    if [[ "${YES}" != "yes" ]]; then
+        echo -n "Add this configuration to ${NETDEV}? [Y/n] "
+        read -r add
+        [[ -z "${add}" || "${add}" == "y" || "${add}" == "Y" ]] || return 1
+    fi
+
+    echo -e "${CONFIG}" >> "${NETDEV}"
+
+    # Find interface in $NETDEV
+    local interface
+    interface=$(awk '/Name = /{print $3}' "${NETDEV}")
+
+    # Check if interface is non-zero and actually existing
+    if [[ ${interface} && -e /sys/class/net/${interface} ]]; then
+        wg set "${interface}" peer "${peer}" allowed-ips "${allowed_ips}"
+    fi
+}
+
+# Inner function for cmd_remove_peer
+remove_peer() {
+    local peer="$1"
+
+    # Always print portion that is removed to stdout
+    if gawk -v pk="${peer}" \
+        '{ l[++n]=$0 }
+        /^PublicKey/ { if($3==pk){ f=1;fs=1 } }
+        /^$/ { if(f){ for(i=1;i<=n;i++){ print l[i] } } delete l;n=0;f=0 }
+        END { exit !fs }' \
+        "${NETDEV}"
+    then
+        if [[ "${YES}" != "yes" ]]; then
+            echo -n "Remove this configuration from ${NETDEV}? [y/N] "
+            read -r del
+            [[ "${del}" == "y" || "${del}" == "Y" ]] || return 1
+        fi
+
+        # Remove from $NETDEV
+        gawk -i inplace -v pk="${peer}" \
+            '{ l[++n]=$0 }
+            /^PublicKey/ { if($3==pk){ f=1;fs=1 } }
+            /^$/ { if(!f){ for(i=1;i<=n;i++){ print l[i] } } delete l;n=0;f=0 }
+            END { exit !fs }' \
+            "${NETDEV}"
+
+        # Find interface in $NETDEV
+        local interface
+        interface=$(awk '/Name = /{print $3}' "${NETDEV}")
+
+        # Check if interface is non-zero and actually existing
+        if [[ ${interface} && -e /sys/class/net/${interface} ]]; then
+            wg set "${interface}" peer "${peer}" remove
+        fi
+        return 0
+    else
+        echo "No peer with this PublicKey was found!" >&2
+        return 1
+    fi
+}
+
+new_token() {
+    local name="$1"
+    local allowed_ips="$2"
+
+    # Add CIDR /32 to ip addresses without suffix
+    allowed_ips=$(echo "${allowed_ips}" | sed 's#\.\([0-9]\+\)\(,\|$\)#.\1/32\2#g')
+
+    test_name "${name}" || return $?
+    test_allowedips "${allowed_ips}" || return $?
+
+    CONFIG="$(head -c 5 /dev/urandom | base32)\t\t${allowed_ips}\t\t${name}"
+    echo -e "${CONFIG}"
+    echo -e "${CONFIG}" >> "${TOKLIST}"
+}
+
+usage() {
+    cat <<EOF
+Usage: wg-setup [-y] [-f <file>] <command> [args...]
+    -f <file>   systemd .netdev file to edit
+    -t <file>   wg-setup tokenlist to use
+    -y          no confirmation required
+
+Commands:
+    Without arguments, all commands except for list-* run interactively.
+
+    add-peer <name> <public-key> <allowed-ips>
+        Add the provided configuration to WireGuard interface
+    remove-peer <public-key>
+        Remove a peer from the WireGuard interface by PublicKey
+    new-token <name> <allowed-ips>
+        Generate a new random token for use with hostname <name> and ip address
+        <allowed-ips>. Tokens are eight characters long Base32 strings
+    revoke-token <token>
+        Remove an existing token by it's Base32 value, e.g. when it got sent to the
+        wrong recipient
+    list-peers [format]
+        List all valid wg-setup peers (those with a hostname) known to WireGuard.
+        By default, a hosts-like list of addresses and hostnames is generated.
+        Available formats are: hosts, dnszone, csv
+        All lists are sorted by AllowedIPs, only csv prints a pubkey-hostname-mapping.
+    list-tokens
+        List generated, but unsed tokens of wg-setup
+EOF
+    exit "$1"
+}
+
+cmd_add_peer() {
+    if [[ $# -gt 3 ]]; then
+        echo "Error: Too many arguments!" >&2
+        usage 1
+    elif [[ $# -gt 0 && $# -lt 3 ]]; then
+        echo "Error: Too few arguments!" >&2
+        usage 1
+    fi
+    NAME=$1
+    PEER=$2
+    ALLOWED_IPS=$3
+
+    if [[ -z "${PEER}" ]]; then
+        echo "Add WireGuard peer(s) to ${NETDEV}"
+
+        cont="y"
+        while [[ "${cont}" == "y" || "${cont}" == "Y" ]]; do
+            echo -n "Name: "
+            read -r name
+            test_name "${name}" || continue
+
+            echo -n "PublicKey: "
+            read -r pubkey
+            test_publickey "${pubkey}" || continue
+
+            echo -n "AllowedIPs: "
+            read -r allowedips
+            test_allowedips "${allowedips}" || continue
+
+            echo
+            ! add_peer "${name}" "${pubkey}" "${allowedips}" 2>&1
+            echo -n "Add another peer? [y/N] "
+            read -r cont
+        done
+    else
+        add_peer "${NAME}" "${PEER}" "${ALLOWED_IPS}"
+    fi
+
+}
+
+cmd_remove_peer() {
+    if [[ $# -gt 1 ]]; then
+        echo "Error: Too many arguments!" >&2
+        usage 1
+    fi
+    PEER=$1
+
+    # go interactive if no peer provided
+    if [[ -z "${PEER}" ]]; then
+        echo "Remove WireGuard peer(s) from ${NETDEV}"
+
+        cont="y"
+        while [[ "${cont}" == "y" || "${cont}" == "Y" ]]; do
+            echo -n "Enter PublicKey: "
+            read -r peer
+            ! remove_peer "${peer}" 2>&1
+            echo -n "Remove another peer? [y/N] "
+            read -r cont
+        done
+    else
+        remove_peer "${PEER}"
+    fi
+}
+
+cmd_new_token() {
+    if [[ $# -gt 2 ]]; then
+        echo "Error: Too many arguments!" >&2
+        usage 1
+    elif [[ $# -gt 0 && $# -lt 2 ]]; then
+        echo "Error: Too few arguments!" >&2
+        usage 1
+    fi
+    name=$1
+    allowed_ips=$2
+
+    if [[ -z "${name}" ]]; then
+        echo "Add wg-setup tokens to ${TOKLIST}"
+
+        cont="y"
+        while [[ "${cont}" == "y" || "${cont}" == "Y" ]]; do
+            echo -n "Name: "
+            read -r name
+            test_name "${name}" || continue
+
+            echo -n "AllowedIPs: "
+            read -r allowedips
+            test_allowedips "${allowedips}" || continue
+
+            echo
+            ! new_token "${name}" "${allowedips}" 2>&1
+            echo -n "Add another token? [y/N] "
+            read -r cont
+        done
+    else
+        new_token "${name}" "${allowed_ips}"
+    fi
+}
+
+if [[ $UID -ne 0 && ! $WG_TEST ]]; then
+    echo "Privilege elevation..." >&2
+    sudo "$0" "$@"
+    exit $?
+fi
+
+# use enhanced getopt
+OPTS=f:t:yh
+LOPTS=file:,tokfile:,noconfirm,help
+PARSED_OPTS=$(getopt -o $OPTS -l $LOPTS -n "$0" -- "$@")
+eval set -- "$PARSED_OPTS"
+
+# set defaults
+#shellcheck disable=SC2010
+FIRST_NETDEV=$(ls /etc/systemd/network/*.netdev | grep -E 'wg|wireguard' | head -1)
+DEFAULT_NETDEV=${WG_TEST_FILE:-${FIRST_NETDEV}}
+NETDEV=${NETDEV:-${DEFAULT_NETDEV}}
+YES=n
+DEFAULT_TOKLIST=${WG_TEST_FILE:-/var/lib/wg-setup/tokenlist}
+TOKLIST=${DEFAULT_TOKLIST}
+
+while [[ "$1" != "--" ]]; do
+    case $1 in
+    -f|--file)
+        NETDEV="$2"
+        shift 2
+        ;;
+    -t|--tokfile)
+        TOKLIST="$2"
+        shift 2
+        ;;
+    -y|--noconfirm)
+        YES=yes
+        shift
+        ;;
+    -h|--help)
+        usage
+        ;;
+    *)
+        echo "Programming error" >&2
+        exit 1
+        ;;
+    esac
+done
+shift # away the --
+
+# $1 is command
+cmd="$1"; shift || usage 1
+# $1 is name, $2 is peer, $3 is allowed-ips
+
+case "${cmd}" in
+    add-peer)
+        cmd_add_peer "$@"
+        ;;
+    remove-peer)
+        cmd_remove_peer "$@"
+        ;;
+    list-peers)
+        cmd_list_peers "$@"
+        ;;
+    new-token)
+        cmd_new_token "$@"
+        ;;
+    list-tokens)
+        cmd_list_tokens "$@"
+        ;;
+    revoke-token)
+        cmd_revoke_token "$@"
+        ;;
+    help)
+        usage 0
+        ;;
+    *)
+        echo "Unknown command ${cmd}!"
+        exit 127
+        ;;
+esac
+

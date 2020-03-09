@@ -12,16 +12,15 @@ run_test() {
 
     if [[ -f ${test}.infile ]]; then
         cp ${test}.infile ${tmpdir}/infile
-        export WG_TEST_FILE=${tmpdir}/infile
     else
-        echo "Error: testing without testfile is a stub!" >&2
-        exit 1
+        touch ${tmpdir}/infile
     fi
+    export WG_TEST_FILE=${tmpdir}/infile
     
     if [[ $has_stdin -eq 1 ]]; then
-        ! ${command} ${args} <${test}.stdin 1>${tmpdir}/stdout 2>${tmpdir}/stderr
+        ! wg-setup ${command} ${args} <${test}.stdin 1>${tmpdir}/stdout 2>${tmpdir}/stderr
     else
-        ! ${command} ${args} 1>${tmpdir}/stdout 2>${tmpdir}/stderr
+        ! wg-setup ${command} ${args} 1>${tmpdir}/stdout 2>${tmpdir}/stderr
     fi
     res=${PIPESTATUS[0]}
     [[ -f ${test}.result ]] && expres=$(<${test}.result)
@@ -61,32 +60,38 @@ export WG_TEST=1
 export PATH=$(realpath ..):${PATH}
 export LANG=en_US.UTF-8
 
-run_test wg-add-peer/interactive-success
-run_test wg-add-peer/interactive-y-success
-run_test wg-add-peer/interactive-error-abort
-run_test wg-add-peer/interactive-error-no-name
-run_test wg-add-peer/interactive-error-no-pubkey
-run_test wg-add-peer/interactive-error-no-allowedips
-run_test wg-add-peer/interactive-error-name-exists
-run_test wg-add-peer/interactive-error-pubkey-exists
-run_test wg-add-peer/interactive-error-allowedips-exists
+run_test add-peer/interactive-success
+run_test add-peer/interactive-success-nocidr
+run_test add-peer/interactive-y-success
+run_test add-peer/interactive-error-abort
+run_test add-peer/interactive-error-no-name
+run_test add-peer/interactive-error-no-pubkey
+run_test add-peer/interactive-error-no-allowedips
+run_test add-peer/interactive-error-invalid-name
+run_test add-peer/interactive-error-invalid-pubkey
+run_test add-peer/interactive-error-invalid-allowedips
+run_test add-peer/interactive-error-name-exists
+run_test add-peer/interactive-error-pubkey-exists
+run_test add-peer/interactive-error-allowedips-exists
 
-run_test wg-add-peer/args-success
-run_test wg-add-peer/args-y-success
-run_test wg-add-peer/args-error-abort
-run_test wg-add-peer/args-error-too-few-arguments
-run_test wg-add-peer/args-error-name-exists
-run_test wg-add-peer/args-error-pubkey-exists
-run_test wg-add-peer/args-error-allowedips-exists
+run_test add-peer/args-success
+run_test add-peer/args-y-success
+run_test add-peer/args-error-abort
+run_test add-peer/args-error-too-few-arguments
+run_test add-peer/args-error-name-exists
+run_test add-peer/args-error-pubkey-exists
+run_test add-peer/args-error-allowedips-exists
 
-run_test wg-remove-peer/interactive-success
-run_test wg-remove-peer/interactive-y-success
-run_test wg-remove-peer/interactive-error-pubkey-not-found
-run_test wg-remove-peer/interactive-error-abort
-run_test wg-remove-peer/interactive-success-malformed
-run_test wg-remove-peer/interactive-success-extra
+run_test remove-peer/interactive-success
+run_test remove-peer/interactive-y-success
+run_test remove-peer/interactive-error-pubkey-not-found
+run_test remove-peer/interactive-error-abort
+run_test remove-peer/interactive-success-malformed
+run_test remove-peer/interactive-success-extra
 
-run_test wg-remove-peer/args-success
-run_test wg-remove-peer/args-y-success
-run_test wg-remove-peer/args-error-pubkey-not-found
-run_test wg-remove-peer/args-error-abort
+run_test remove-peer/args-success
+run_test remove-peer/args-y-success
+run_test remove-peer/args-error-pubkey-not-found
+run_test remove-peer/args-error-abort
+
+run_test new-token/interactive-success
