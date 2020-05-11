@@ -1,0 +1,26 @@
+#!/bin/bash -e
+# This script is set as login-shell for the wg-setup user. SSH access
+# for wg-setup is either without any authentication or with a shared,
+# non-secure SSH key.
+[[ -z "${DEBUG}" ]] && exec 2>/dev/null
+
+error() {
+    echo "Error: $*" >&2
+    exit 0
+}
+
+echo -n "Token: "
+read -r token
+
+echo -n "PublicKey: "
+read -r peer
+
+echo -n "AllowedIPs: "
+read -r allowed_ips
+
+[[ "$token" =~ ^[A-Z2-7]{8}$ ]] || error "Invalid token"
+[[ "$peer" =~ ^[A-Za-z0-9/+]{43}=$ ]] || error "Invalid public key"
+[[ "$allowed_ips" =~ ^(([0-9]{1,3}\.){3}[0-9]{1,3}(/[0-9]{1,2})?,?)+$ ]] || error "Invalid allowed_ips"
+
+wg-setup-use-token -y "${token}" "${peer}" "${allowed_ips}" >&2 || error "No match found"
+echo "OK"

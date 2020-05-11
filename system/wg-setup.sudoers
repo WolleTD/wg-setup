@@ -1,0 +1,2 @@
+## WireGuard automatic setup - allow to execute add-wg-peer
+wg-setup ALL=(ALL) NOPASSWD: /usr/local/bin/wg-setup-use-token

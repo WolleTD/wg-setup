@@ -1,0 +1,11 @@
+[Unit]
+Description=wg-setup service for automatic token resolving
+
+[Service]
+User=wg-setup
+WorkingDirectory=~
+Environment=PORT=WG_PORT
+ExecStart=/bin/socat tcp-l:${PORT},fork system:wg-setup-service
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,9 @@
+#!/bin/bash -e
+# This is just a wrapper around "wg-setup use-token" to prevent
+# having the wg-setup executable in NOPASSWD sudoers
+
+if [[ $UID -ne 0 ]]; then
+    sudo "$0" "$@"
+    exit $?
+fi
+wg-setup use-token "$@"
