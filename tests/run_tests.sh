@@ -129,3 +129,10 @@ run_test use-token/args-wrong-allowedips
 run_test use-token/args-invalid-token
 run_test use-token/args-invalid-allowedips
 run_test use-token/args-invalid-publickey
+
+run_test revoke-token/args-success
+run_test revoke-token/args-invalid-token
+run_test revoke-token/args-wrong-token
+
+run_test list-tokens/args-success
+run_test list-tokens/args-empty

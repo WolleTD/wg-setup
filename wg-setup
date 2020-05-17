@@ -331,6 +331,33 @@ cmd_use_token() {
     fi
 }
 
+cmd_revoke_token() {
+    if [[ $# -gt 1 ]]; then
+        echo "Error: Too many arguments!" >&2
+        usage 1
+    fi
+    token=$1
+
+    if [[ -z "${token}" ]]; then
+        echo -n "Token: "
+        read -r token
+    fi
+
+    test_token "${token}" >&2
+
+    if grep -E "^${token}" "${TOKLIST}"; then
+        sed -i "/^${token}/d" "${TOKLIST}"
+    else
+        echo "Error: Token not found!" >&2
+        return 1
+    fi
+}
+
+cmd_list_tokens() {
+    echo "Unused tokens:"
+    cat "${TOKLIST}"
+}
+
 if [[ $UID -ne 0 && ! $WG_TEST ]]; then
     echo "Privilege elevation..." >&2
     sudo "$0" "$@"
