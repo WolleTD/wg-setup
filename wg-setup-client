@@ -1,0 +1,314 @@
+#!/bin/bash -e
+# Generate a WireGuard configuration for wg-quick or
+# systemd-networkd, if it's the active network manager.
+# Meant to easily setup large amounts of clients to a network by just
+# providing individual IP addresses
+# This is not sophisticated, but meant to customize or just inspire. Have fun.
+#   created by Eicke Herbertz, 2020
+
+error() {
+    echo "Error: $*" >&2
+    exit 1
+}
+
+usage() {
+    cat <<EOF
+Usage: $0 [-fhst] [-d descr] [-e <endpoint>] [-g gateway] [-i <name>] [-p pubkey]
+        [ip-addr] [token|port]
+
+    -d,--descr      Description for .netdev (default: WireGuard VPN)
+    -e,--endpoint   WireGuard endpoint of the Server
+    -f,--force      overwrite existing files
+    -g,--gateway    Internal IP of the server for ping test (default: Network+1)
+    -h,--help       Show this usage text
+    -i,--iface      name of the WireGuard interface to create (default: wg0)
+    -p,--pubkey     WireGuard public key of the Server
+    -s,--server     Create a server configuration (skip peer setup)
+    -t,--token      automatic setup with token
+    ip-addr         ip address for this client
+    token           wg-setup token to use (implies -t)
+    port            listening port in --server mode, replaces token positional parameter
+EOF
+    exit $1
+}
+
+[[ $UID -eq 0 || -n "${WG_TEST}" ]] || error "Please run as root!"
+command -v wg >/dev/null || error "wg tool not found. Please install wireguard-tools first!"
+
+OPTS=d:e:fg:hi:p:st
+LOPTS=descr:,endpoint:,force,gateway:,help,iface:,pubkey:,server,token
+PARSED_OPTS=$(getopt -o $OPTS -l $LOPTS -n "$0" -- "$@")
+eval set -- "$PARSED_OPTS"
+
+while [[ "$1" != "--" ]]; do
+    case $1 in
+    -d|--descr)
+        WG_DESC="$2"
+        shift 2
+        ;;
+    -e|--endpoint)
+        WG_ENDPOINT="$2"
+        shift 2
+        ;;
+    -f|--force)
+        FORCE=yes
+        shift
+        ;;
+    -g|--gateway)
+        PING_GATEWAY="$2"
+        shift 2
+        ;;
+    -h|--help)
+        usage
+        ;;
+    -i|--iface)
+        WG_NAME="$2"
+        shift 2
+        ;;
+    -p|--pubkey)
+        WG_PUBKEY="$2"
+        shift 2
+        ;;
+    -s|--server)
+        CREATE_SERVER=yes
+        shift
+        ;;
+    -t|--token)
+        USETOKEN=yes
+        shift
+        ;;
+    *)
+        echo "Programming error" >&2
+        usage 1
+        ;;
+    esac
+done
+shift # away the --
+
+# $1 is ip_addr
+[[ $# -ge 1 ]] && IP_ADDRESS="$1"
+[[ $# -ge 2 ]] && TOKEN="$2"
+[[ $# -ge 3 ]] && usage 1
+[[ -n "${TOKEN}" ]] && USETOKEN=yes
+
+if [[ -n "${CREATE_SERVER}" ]]; then
+    [[ -z "${USETOKEN}" ]] || echo "Warning: Creating server configuration, ignoring token!"
+    [[ -n "${TOKEN}" ]] && SEVER_PORT="${TOKEN}"
+    unset USETOKEN TOKEN
+fi
+
+if [[ -z "${IP_ADDRESS}" ]]; then
+    [[ -z "${CREATE_SERVER}" ]] && echo -n "Enter ip address for this client: "
+    [[ -n "${CREATE_SERVER}" ]] && echo -n "Enter server ip address: "
+    read -r IP_ADDRESS
+fi
+
+[[ "${IP_ADDRESS}" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}(/[0-9]{1,2})?$ ]] ||
+    error "Invalid ip address"
+
+# If CIDR is provided on ip address, use it
+ip_stripped="${IP_ADDRESS%/*}"
+if [[ "${ip_stripped}" != "${IP_ADDRESS}" ]]; then
+    # Check if CIDR matches WG_CIDR, if set
+    ip_cidr="${IP_ADDRESS#*/}"
+    [[ -z "${WG_CIDR}" || "${WG_CIDR}" == "${ip_cidr}" ]] ||
+        error "CIDR ${ip_cidr} in ${IP_ADDRESS} doesn't match WG_CIDR=${WG_CIDR}!"
+    WG_CIDR="${ip_cidr}"
+    IP_ADDRESS="${ip_stripped}"
+fi
+
+if [[ -z "${WG_CIDR}" ]]; then
+    echo "Warning: Using default CIDR of /24!"
+    WG_CIDR=24
+fi
+
+# Calculate network from IP address and CIDR
+WG_NET=$(echo "${IP_ADDRESS}" | awk -F. -v mask="${WG_CIDR}" \
+    '{u32addr=lshift($1,24)+lshift($2,16)+lshift($3,8)+$4;
+    for(i=31;mask>0;mask--){u32mask+=lshift(1,i--)};u32net=and(u32addr,u32mask);
+    printf("%d.%d.%d.%d\n",and(255,rshift(u32net,24)),and(255,rshift(u32net,16)),
+    and(255,rshift(u32net,8)),and(255,u32net))}')
+
+# Stay safe and check parsed result
+[[ "${WG_NET}" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] ||
+    error "Failed to calculate network address (Result: ${WG_NET})"
+
+if [[ -z "${CREATE_SERVER}" ]]; then
+    if [[ -z "${WG_PUBKEY}" ]]; then
+        echo -n "Server PublicKey: "
+        read -r WG_PUBKEY
+    fi
+
+    [[ "${WG_PUBKEY}" =~ ^[A-Za-z0-9/+]{43}=$ ]] || error "Invalid PublicKey format!"
+
+    if [[ -z "${WG_ENDPOINT}" ]]; then
+        echo -n "Server Endpoint: "
+        read -r WG_ENDPOINT
+    fi
+
+    [[ "${WG_ENDPOINT}" =~ ^[A-Za-z0-9.-]+:[0-9]+$ ]] || error "Invalid Endpoint (host:port)!"
+fi
+
+# This won't be queried if unset
+WG_NAME=${WG_NAME:-wg0}
+
+if [[ -z "${WG_QUICK_CONF}" ]] && systemctl is-enabled systemd-networkd.service >/dev/null; then
+    WG_BASENAME=${WG_BASENAME:-90-wireguard}
+    WG_NETDEV=${WG_NETDEV:-/etc/systemd/network/${WG_BASENAME}.netdev}
+    WG_NETWORK=${WG_NETWORK:-/etc/systemd/network/${WG_BASENAME}.network}
+    WG_DESC=${WG_DESC:-WireGuard VPN}
+    [[ -f "${WG_NETDEV}" && -z "${FORCE}" ]] &&
+        error "${WG_NETDEV} already exists (use -f to overwrite)!"
+    [[ -f "${WG_NETWORK}" && -z "${FORCE}" ]] &&
+        error "${WG_NETWORK} already exists (use -f to overwrite)!"
+else
+    [[ -z "${CREATE_SERVER}" ]] || error "wg-setup only supports systemd-networkd servers!"
+    WG_QUICK_CONF=${WG_QUICK_CONF:-/etc/wireguard/${WG_NAME}.conf}
+    [[ -f "${WG_QUICK_CONF}" && -z "${FORCE}" ]] &&
+        error "${WG_QUICK_CONF} already exists (use -f to overwrite)!"
+fi
+
+[[ -n "${WG_QUICK_CONF}" && -n "${WG_NETDEV}${WG_NETWORK}" ]] &&
+    error "Can't set both WG_QUICK_CONF and WG_NETDEV|WG_NETWORK!"
+
+# Generate keys
+PRIVATE_KEY="$(wg genkey)"
+PUBLIC_KEY="$(wg pubkey <<<${PRIVATE_KEY})"
+
+# Write the file headers
+if [[ -z "${WG_QUICK_CONF}" ]]; then
+    # For systemd-networkd, configuration is split
+    # into a .network and a .netdev file
+    cat > "${WG_NETWORK}" <<EOF
+[Match]
+Name = ${WG_NAME}
+
+[Network]
+EOF
+    cat > "${WG_NETDEV}" <<EOF
+[NetDev]
+Name = ${WG_NAME}
+Kind = wireguard
+Description = ${WG_DESC}
+
+[WireGuard]
+EOF
+
+else
+    # For wg-quick, it's not much of a header
+    cat > "${WG_QUICK_CONF}" <<EOF
+# ${WG_DESC}
+[Interface]
+EOF
+fi
+
+[[ -n "${CREATE_SERVER}" ]] && echo "ListenPort = ${SERVER_PORT}" >> ${WG_NETDEV}
+
+# Write PrivateKey to either wg-quick conf or .netdev
+echo "PrivateKey = ${PRIVATE_KEY}" >> ${WG_QUICK_CONF:-${WG_NETDEV}}
+unset PRIVATE_KEY
+
+# Write PrivateKey to either wg-quick conf or .network
+echo "Address = ${IP_ADDRESS}/${WG_CIDR}" >> ${WG_QUICK_CONF:-${WG_NETWORK}}
+
+# Add a newline before peer configuration
+echo >> ${WG_QUICK_CONF:-${WG_NETDEV}}
+
+# Write peer information to either wg-quick conf or .netdev
+[[ -z "${CREATE_SERVER}" ]] && cat >> "${WG_QUICK_CONF:-${WG_NETDEV}}" <<EOF
+[${WG_NETDEV:+WireGuard}Peer]
+PublicKey = ${WG_PUBKEY}
+AllowedIPs = ${WG_NET}/${WG_CIDR}
+Endpoint = ${WG_ENDPOINT}
+PersistentKeepalive = 25
+
+EOF
+
+chmod 0640 "${WG_QUICK_CONF:-${WG_NETDEV}}"
+[[ -n "${WG_NETDEV}" && -z "${WG_TEST}" ]] && chgrp systemd-network "${WG_NETDEV}"
+
+if [[ -z "${WG_QUICK_CONF}" ]]; then
+    SERVICE="systemd-networkd.service"
+    ACTION="Restarting"
+else
+    SERVICE="wg-quick@${WG_NAME}.service"
+    ACTION="Starting"
+fi
+
+# Enabling an already enabled service is a noop
+[[ -n "${WG_TEST}" ]] || systemctl enable "${SERVICE}"
+
+if ! modprobe wireguard; then
+    echo "Probably the kernel got updated, please reboot!" >&2
+    if [[ -n "${CREATE_SERVER}" && -z "${SERVER_PORT}" ]]; then
+        echo "Could not start server and no port was set!" >&2
+        echo "You will have to set the ListenPort manually in ${WG_NETDEV}" >&2
+    fi
+else
+    echo "${ACTION} ${SERVICE}"
+    [[ -n "${WG_TEST}" ]] || systemctl restart "${SERVICE}"
+    if [[ -n "${CREATE_SERVER}" && -z "${SERVER_PORT}" ]]; then
+        SERVER_PORT=$(wg show "${WG_NAME}" | awk '/listening port/{print $3}')
+        if [[ -z "${SERVER_PORT}" ]]; then
+            echo "Warning: Could not determine ListenPort!" >&2
+            echo "You will have to set the ListenPort manually in ${WG_NETDEV}" >&2
+        else
+            sed -i "s/ListenPort = /ListenPort = ${SERVER_PORT}/" "${WG_NETDEV}"
+        fi
+    fi
+fi
+
+if [[ -n "${USETOKEN}" ]]; then
+    if [[ -z "${TOKEN}" ]]; then
+        echo "Enter token for ${IP_ADDRESS} on ${WG_ENDPOINT}:"
+        read -r TOKEN
+    else
+        echo "Wait 1s for systemd-resolved"
+        sleep 1
+    fi
+
+    [[ "${TOKEN}" =~ ^[A-Z2-7]{8}$ ]] || error "Invalid token format!"
+
+    REQUEST="${TOKEN}\n${PUBLIC_KEY}\n${IP_ADDRESS}"
+    echo "Connecting to tcp://${WG_ENDPOINT}"
+    RESPONSE=$(echo -e "${REQUEST}" | nc ${WG_ENDPOINT/:/ })
+
+    if [[ "${RESPONSE##*: }" == "OK" ]]; then
+        # Guess ping target from network address
+        if [[ -z "${PING_GATEWAY}" ]]; then
+            PING_GATEWAY=$(echo "${WG_NET}" | awk -F. '{printf("%d.%d.%d.%d\n",$1,$2,$3,($4+1))}')
+            guessed=yes
+        fi
+        echo "Success! Using ping target: ${PING_GATEWAY}"
+        if ping -c1 "${PING_GATEWAY}" >/dev/null; then
+            echo "Ping successful! WireGuard VPN setup complete!"
+        elif [[ -n "${guessed}" ]]; then
+            echo -e "\e[31mPing failed, maybe the server isn't behind ${PING_GATEWAY}?\e[m"
+            exit 1
+        else
+            echo -e "\e[31mPing to ${PING_GATEWAY} failed! Check configuration!\e[m"
+            exit 1
+        fi
+        exit 0
+    else
+        echo -e "\e[31mERROR: Could not add to server! Configuration:\e[m
+[${WG_NETDEV:+WireGuard}Peer]
+PublickKey = ${PUBLIC_KEY}
+AllowedIPs = ${IP_ADDRESS}/32"
+        exit 1
+    fi
+fi
+if [[ -z "${CREATE_SERVER}" ]]; then
+    echo "============================================================
+WireGuard setup successful! Server side peer configuration:
+[${WG_NETDEV:+WireGuard}Peer]
+PublickKey = ${PUBLIC_KEY}
+AllowedIPs = ${IP_ADDRESS}/32"
+    exit 0
+else
+    echo "============================================================
+WireGuard server setup successful!
+PublicKey: ${PUBLIC_KEY}
+ListenPort: ${SERVER_PORT}"
+    exit 0
+fi

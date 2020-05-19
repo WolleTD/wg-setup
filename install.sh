@@ -39,6 +39,13 @@ install-full() {
     systemctl daemon-reload
 }
 
+wireguard() {
+    echo "Setting up WireGuard server using wg-setup-client"
+    wg-setup-client --server $1
+    echo "Installing wg-setup"
+    install-full
+}
+
 uninstall() {
 	echo "Remove ${DESTDIR}/bin/wg-setup"
 	rm -f ${DESTDIR}/bin/wg-setup
@@ -75,11 +82,15 @@ uninstall|remove)
 scripts)
     install-scripts
     ;;
+wireguard|wg)
+    wireguard
+    ;;
 *)
     echo "Available commands:
 
     install     Install wg-setup, including system user and service
     uninstall   Remove wg-setup, including system user and service
-    scripts     Install only scripts, no users or config files"
+    scripts     Install only scripts, no users or config files
+    wireguard   Full install, including setting up the WireGuard server with wg-setup-client"
     ;;
 esac
