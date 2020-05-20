@@ -144,8 +144,16 @@ new_token() {
     # Add CIDR /32 to ip addresses without suffix
     allowed_ips=$(echo "${allowed_ips}" | sed 's#\.\([0-9]\+\)\(,\|$\)#.\1/32\2#g')
 
-    test_name "${name}" || return $?
-    test_allowedips "${allowed_ips}" || return $?
+    test_name "${name}" >&2 || return $?
+    test_allowedips "${allowed_ips}" >&2 || return $?
+    if grep "${name}" "${TOKLIST}" >/dev/null; then
+        echo "A token for this Name already exists!" >&2
+        return 2
+    fi
+    if grep "${allowed_ips}" "${TOKLIST}" >/dev/null; then
+        echo "A token for this AllowedIPs already exists!" >&2
+        return 2
+    fi
 
     CONFIG="$(head -c 5 /dev/urandom | base32)\t\t${allowed_ips}\t\t${name}"
     echo -e "${CONFIG}"

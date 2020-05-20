@@ -59,7 +59,7 @@ run_test() {
     regexp=""
     [[ -f ${test}.expected-toklist ]] && regexp=$(<${test}.expected-toklist)
     if [[ ! "$(<${tmpdir}/toklist)" =~ ^${regexp}$ ]]; then
-        echo "Test ${test} failed: Output file doesn't match expectation!"
+        echo "Test ${test} failed: Output tokenlist doesn't match expectation!"
         cat ${tmpdir}/toklist
         error=1
     fi
@@ -109,6 +109,19 @@ run_test remove-peer/args-error-pubkey-not-found
 run_test remove-peer/args-error-abort
 
 run_test new-token/interactive-success
+run_test new-token/interactive-error-name
+run_test new-token/interactive-error-allowedips
+run_test new-token/interactive-error-name-exists
+run_test new-token/interactive-error-allowedips-exists
+
+run_test new-token/args-success
+run_test new-token/args-error-name
+run_test new-token/args-error-allowedips
+run_test new-token/args-error-name-exists
+run_test new-token/args-error-allowedips-exists
+run_test new-token/args-error-name-in-toklist
+run_test new-token/args-error-allowedips-in-toklist
+
 run_test use-token/args-success
 run_test use-token/args-success-no-cidr
 run_test use-token/args-wrong-token
