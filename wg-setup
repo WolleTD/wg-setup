@@ -49,6 +49,14 @@ test_publickey() {
     test_exists "PublicKey" "$1"
 }
 
+# Test if a string is valid wg-setup token
+test_token() {
+    if [[ ! "$1" =~ ^[A-Z2-7]{8}$ ]]; then
+        echo "Error: Token invalid!"
+        return 1
+    fi
+}
+
 # Inner function for cmd_add_peer
 add_peer() {
     local name="$1"
@@ -161,6 +169,9 @@ Commands:
     new-token <name> <allowed-ips>
         Generate a new random token for use with hostname <name> and ip address
         <allowed-ips>. Tokens are eight characters long Base32 strings
+    use-token <token> <public-key> <allowed-ips>
+        Test token and allowed-ips and on success, add public-key and allowed-ips
+        to WireGuard configuration
     revoke-token <token>
         Remove an existing token by it's Base32 value, e.g. when it got sent to the
         wrong recipient
@@ -273,6 +284,45 @@ cmd_new_token() {
     fi
 }
 
+cmd_use_token() {
+    if [[ $# -gt 3 ]]; then
+        echo "Error: Too many arguments!" >&2
+        usage 1
+    elif [[ $# -gt 0 && $# -lt 3 ]]; then
+        echo "Error: Too few arguments!" >&2
+        usage 1
+    fi
+    token=$1
+    peer=$2
+    allowed_ips=$3
+
+    # Add CIDR /32 to ip addresses without suffix
+    allowed_ips=$(echo "${allowed_ips}" | sed 's#\.\([0-9]\+\)\(,\|$\)#.\1/32\2#g')
+
+    if [[ -z "${token}" ]]; then
+        echo -n "Token: "
+        read -r token
+
+        echo -n "PublicKey: "
+        read -r peer
+
+        echo -n "AllowedIPs: "
+        read -r allowed_ips
+    fi
+
+    test_token "${token}" >&2 || return 1
+    test_publickey "${peer}" >&2 || return 1
+    test_allowedips "${allowed_ips}" >&2 || return 1
+
+    name=$(awk -v tok="${token}" -v ips="${allowed_ips}" '$1==tok&&$2==ips{print $3}' "${TOKLIST}")
+    if [[ ${name} ]]; then
+        add_peer "${name}" "${peer}" "${allowed_ips}" || return 1
+        sed -i "/^${token}/d" "${TOKLIST}"
+    else
+        return 1
+    fi
+}
+
 if [[ $UID -ne 0 && ! $WG_TEST ]]; then
     echo "Privilege elevation..." >&2
     sudo "$0" "$@"
@@ -291,7 +341,7 @@ FIRST_NETDEV=$(ls /etc/systemd/network/*.netdev | grep -E 'wg|wireguard' | head 
 DEFAULT_NETDEV=${WG_TEST_FILE:-${FIRST_NETDEV}}
 NETDEV=${NETDEV:-${DEFAULT_NETDEV}}
 YES=n
-DEFAULT_TOKLIST=${WG_TEST_FILE:-/var/lib/wg-setup/tokenlist}
+DEFAULT_TOKLIST=${WG_TEST_TOKLIST:-/var/lib/wg-setup/tokenlist}
 TOKLIST=${DEFAULT_TOKLIST}
 
 while [[ "$1" != "--" ]]; do
@@ -335,6 +385,9 @@ case "${cmd}" in
         ;;
     new-token)
         cmd_new_token "$@"
+        ;;
+    use-token)
+        cmd_use_token "$@"
         ;;
     list-tokens)
         cmd_list_tokens "$@"

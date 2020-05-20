@@ -13,6 +13,9 @@ Commands:
     new-token <name> <allowed-ips>
         Generate a new random token for use with hostname <name> and ip address
         <allowed-ips>\. Tokens are eight characters long Base32 strings
+    use-token <token> <public-key> <allowed-ips>
+        Test token and allowed-ips and on success, add public-key and allowed-ips
+        to WireGuard configuration
     revoke-token <token>
         Remove an existing token by it's Base32 value, e\.g\. when it got sent to the
         wrong recipient

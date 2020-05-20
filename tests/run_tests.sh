@@ -4,7 +4,7 @@ run_test() {
     local test=$1
     local command=${test%%/*}
     local has_stdin=0 expres=0 error=0
-    local args regexp res
+    local args regexp res toklist
     [[ -f ${test}.stdin ]] && has_stdin=1
     [[ -f ${test}.args ]] && args=$(<${test}.args)
     
@@ -16,6 +16,13 @@ run_test() {
         touch ${tmpdir}/infile
     fi
     export WG_TEST_FILE=${tmpdir}/infile
+
+    if [[ -f ${test}.toklist ]]; then
+        cp ${test}.toklist ${tmpdir}/toklist
+    else
+        touch ${tmpdir}/toklist
+    fi
+    export WG_TEST_TOKLIST=${tmpdir}/toklist
     
     if [[ $has_stdin -eq 1 ]]; then
         ! wg-setup ${command} ${args} <${test}.stdin 1>${tmpdir}/stdout 2>${tmpdir}/stderr
@@ -47,6 +54,13 @@ run_test() {
     if [[ ! "$(<${tmpdir}/stderr)" =~ ^${regexp}$ ]]; then
         echo "Test ${test} failed: Stderr doesn't match expectation!" 
         cat ${tmpdir}/stderr
+        error=1
+    fi
+    regexp=""
+    [[ -f ${test}.expected-toklist ]] && regexp=$(<${test}.expected-toklist)
+    if [[ ! "$(<${tmpdir}/toklist)" =~ ^${regexp}$ ]]; then
+        echo "Test ${test} failed: Output file doesn't match expectation!"
+        cat ${tmpdir}/toklist
         error=1
     fi
     if [[ $error -eq 0 ]]; then
@@ -95,3 +109,10 @@ run_test remove-peer/args-error-pubkey-not-found
 run_test remove-peer/args-error-abort
 
 run_test new-token/interactive-success
+run_test use-token/args-success
+run_test use-token/args-success-no-cidr
+run_test use-token/args-wrong-token
+run_test use-token/args-wrong-allowedips
+run_test use-token/args-invalid-token
+run_test use-token/args-invalid-allowedips
+run_test use-token/args-invalid-publickey
