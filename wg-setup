@@ -103,6 +103,8 @@ remove_peer() {
     # Always print portion that is removed to stdout
     if gawk -v pk="${peer}" \
         '{ l[++n]=$0 }
+        /^\[WireGuardPeer\]$/ { if(f){ for(i=1;i<n;i++){ print l[i] } if(n>1){print ""} }
+            delete l;n=1;f=0;l[n]=$0 }
         /^PublicKey/ { if($3==pk){ f=1;fs=1 } }
         /^$/ { if(f){ for(i=1;i<=n;i++){ print l[i] } } delete l;n=0;f=0 }
         END { exit !fs }' \
@@ -117,6 +119,8 @@ remove_peer() {
         # Remove from $NETDEV
         gawk -i inplace -v pk="${peer}" \
             '{ l[++n]=$0 }
+            /^\[WireGuardPeer\]$/ { if(!f){ for(i=1;i<n;i++){ print l[i] } if(n>1){print ""}}
+                delete l;n=1;f=0;l[n]=$0 }
             /^PublicKey/ { if($3==pk){ f=1;fs=1 } }
             /^$/ { if(!f){ for(i=1;i<=n;i++){ print l[i] } } delete l;n=0;f=0 }
             END { exit !fs }' \

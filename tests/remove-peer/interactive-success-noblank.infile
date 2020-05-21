@@ -1,0 +1,17 @@
+[WireGuardPeer]
+# peer1
+# Added by wolle at 2020-03-01
+PublicKey = aWosQEdndReq6diLeGq2BKKl0fFGA7v/3Qbwu9pbYxg=
+AllowedIPs = 172.16.1.1/32
+
+[WireGuardPeer]
+# peer2
+# Added by wolle at 2020-03-01
+PublicKey = iCJSbobpCRHCG2/WP9D1/viGlv+WrNpWtd1XkRzyrFs=
+AllowedIPs = 172.16.1.2/32
+[WireGuardPeer]
+# peer3
+# Added by wolle at 2020-03-01
+PublicKey = sumgkcdEO3HytLakj3eFdiYU7V0GKANDdIMDLNHxl1c=
+AllowedIPs = 172.16.1.3/32
+

@@ -101,6 +101,8 @@ run_test remove-peer/interactive-y-success
 run_test remove-peer/interactive-error-pubkey-not-found
 run_test remove-peer/interactive-error-abort
 run_test remove-peer/interactive-success-malformed
+run_test remove-peer/interactive-success-noblank
+run_test remove-peer/interactive-success-noblank2
 run_test remove-peer/interactive-success-extra
 
 run_test remove-peer/args-success
