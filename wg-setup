@@ -258,6 +258,44 @@ cmd_remove_peer() {
     fi
 }
 
+cmd_list_peers() {
+    if [[ $# -gt 1 ]]; then
+        echo "Error: Too many arguments!" >&2
+        usage 1
+    fi
+    FORMAT=${1:-hosts}
+    case "${FORMAT}" in
+    hosts)
+        awk '/^\[WireGuardPeer\]$/{getline;if($1=="#"&&$2!="Added"){name=$2}else{name="<none>"}}
+        /^AllowedIPs/{sub(/\/[0-9]+/,"",$3);printf("%-19s %s\n",$3,name)}' \
+            ${NETDEV}
+        ;;
+    added|added)
+        awk '/^\[WireGuardPeer\]$/{getline;if($1=="#"){
+            if($2!="Added"){name=$2;getline;if($1=="#"&&$2=="Added"){comment=$0}}
+            else{name="<none>";comment=$0}}}
+        /^AllowedIPs/{sub(/\/[0-9]+/,"",$3);printf("%-19s %-30s %s\n",$3,name,comment)}' \
+            ${NETDEV}
+        ;;
+    pubkeys)
+        awk '/^\[WireGuardPeer\]$/{getline;if($1=="#"&&$2!="Added"){name=$2}else{name="<none>"}}
+        /^PublicKey/{pubkey=$3}/^AllowedIPs/{sub(/\/[0-9]+/,"",$3);ip=$3}
+        name&&pubkey&&ip{printf("%-19s %-30s %s\n",ip,name,pubkey);name=pubkey=ip=""}' \
+            ${NETDEV}
+        ;;
+    dns-zone)
+        awk '/^\[WireGuardPeer\]$/{getline;if($1=="#"&&$2!="Added"){name=$2}else{name="<none>"}}
+        /^AllowedIPs/{sub(/\/[0-9]+/,"",$3);printf("%-24s IN   A    %s\n",name,$3)}' \
+            ${NETDEV}
+        ;;
+    *)
+        [[ "${FORMAT}" == "help" ]] || echo "Error: Unknown format ${FORMAT}!"
+        echo "Available formats: hosts,added,pubkeys,dns-zone"
+        [[ "${FORMAT}" == "help" ]]
+        ;;
+    esac
+}
+
 cmd_new_token() {
     if [[ $# -gt 2 ]]; then
         echo "Error: Too many arguments!" >&2
