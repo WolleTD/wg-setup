@@ -245,15 +245,21 @@ fi
 # Enabling an already enabled service is a noop
 [[ -n "${WG_TEST}" ]] || systemctl enable "${SERVICE}"
 
-if ! modprobe wireguard; then
-    echo "Probably the kernel got updated, please reboot!" >&2
+if ! lsmod | grep ^wireguard >/dev/null && ! modprobe wireguard; then
+    echo "Can't load WireGuard module! Probably the kernel got updated, please reboot!" >&2
     if [[ -n "${CREATE_SERVER}" && -z "${SERVER_PORT}" ]]; then
         echo "Could not start server and no port was set!" >&2
         echo "You will have to set the ListenPort manually in ${WG_NETDEV}" >&2
     fi
 else
-    echo "${ACTION} ${SERVICE}"
-    [[ -n "${WG_TEST}" ]] || systemctl restart "${SERVICE}"
+    if [[ -n "${WG_TEST}" ]] && systemctl is-system-running >/dev/null; then
+        echo "${ACTION} ${SERVICE}"
+        systemctl restart "${SERVICE}"
+    else
+        [[ -z "${WG_TEST}" ]] || echo -n "Testing: "
+        systemctl is-system-running  >/dev/null || echo -n "Installing in container: "
+        echo "Skipping ${ACTION} ${SERVICE}."
+    fi
     if [[ -n "${CREATE_SERVER}" && -z "${SERVER_PORT}" ]]; then
         SERVER_PORT=$(wg show "${WG_NAME}" | awk '/listening port/{print $3}')
         if [[ -z "${SERVER_PORT}" ]]; then
