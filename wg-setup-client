@@ -169,7 +169,8 @@ if [[ -z "${WG_QUICK_CONF}" ]] && systemctl is-enabled systemd-networkd.service 
     [[ -f "${WG_NETWORK}" && -z "${FORCE}" ]] &&
         error "${WG_NETWORK} already exists (use -f to overwrite)!"
 else
-    [[ -z "${CREATE_SERVER}" ]] || error "wg-setup only supports systemd-networkd servers!"
+    [[ -z "${CREATE_SERVER}" ]] ||
+        echo "Warning: wg-setup can only manage systemd-networkd servers!"
     WG_QUICK_CONF=${WG_QUICK_CONF:-/etc/wireguard/${WG_NAME}.conf}
     [[ -f "${WG_QUICK_CONF}" && -z "${FORCE}" ]] &&
         error "${WG_QUICK_CONF} already exists (use -f to overwrite)!"
@@ -209,20 +210,23 @@ else
 EOF
 fi
 
-[[ -n "${CREATE_SERVER}" ]] && echo "ListenPort = ${SERVER_PORT}" >> ${WG_NETDEV}
+# Substitute once
+WG_CONF_TARGET="${WG_QUICK_CONF:-${WG_NETDEV}}"
+
+[[ -n "${CREATE_SERVER}" ]] && echo "ListenPort = ${SERVER_PORT}" >> ${WG_CONF_TARGET}
 
 # Write PrivateKey to either wg-quick conf or .netdev
-echo "PrivateKey = ${PRIVATE_KEY}" >> ${WG_QUICK_CONF:-${WG_NETDEV}}
+echo "PrivateKey = ${PRIVATE_KEY}" >> ${WG_CONF_TARGET}
 unset PRIVATE_KEY
 
 # Write PrivateKey to either wg-quick conf or .network
 echo "Address = ${IP_ADDRESS}/${WG_CIDR}" >> ${WG_QUICK_CONF:-${WG_NETWORK}}
 
 # Add a newline before peer configuration
-echo >> ${WG_QUICK_CONF:-${WG_NETDEV}}
+echo >> ${WG_CONF_TARGET}
 
 # Write peer information to either wg-quick conf or .netdev
-[[ -z "${CREATE_SERVER}" ]] && cat >> "${WG_QUICK_CONF:-${WG_NETDEV}}" <<EOF
+[[ -z "${CREATE_SERVER}" ]] && cat >> "${WG_CONF_TARGET}" <<EOF
 [${WG_NETDEV:+WireGuard}Peer]
 PublicKey = ${WG_PUBKEY}
 AllowedIPs = ${WG_NET}/${WG_CIDR}
@@ -231,7 +235,7 @@ PersistentKeepalive = 25
 
 EOF
 
-chmod 0640 "${WG_QUICK_CONF:-${WG_NETDEV}}"
+chmod 0640 "${WG_CONF_TARGET}"
 [[ -n "${WG_NETDEV}" && -z "${WG_TEST}" ]] && chgrp systemd-network "${WG_NETDEV}"
 
 if [[ -z "${WG_QUICK_CONF}" ]]; then
@@ -249,24 +253,29 @@ if ! lsmod | grep ^wireguard >/dev/null && ! modprobe wireguard; then
     echo "Can't load WireGuard module! Probably the kernel got updated, please reboot!" >&2
     if [[ -n "${CREATE_SERVER}" && -z "${SERVER_PORT}" ]]; then
         echo "Could not start server and no port was set!" >&2
-        echo "You will have to set the ListenPort manually in ${WG_NETDEV}" >&2
+        echo "You will have to set the ListenPort manually in ${WG_CONF_TARGET}" >&2
     fi
 else
     if [[ -n "${WG_TEST}" ]] && systemctl is-system-running >/dev/null; then
         echo "${ACTION} ${SERVICE}"
         systemctl restart "${SERVICE}"
+    elif [[ -n "${WG_TEST}" ]]; then
+        echo "Testing: Skipping ${ACTION} ${SERVICE}."
     else
-        [[ -z "${WG_TEST}" ]] || echo -n "Testing: "
-        systemctl is-system-running  >/dev/null || echo -n "Installing in container: "
-        echo "Skipping ${ACTION} ${SERVICE}."
+        echo "Installing in container: Running wg-quick up ${WG_IFACE}"
+        if ! wg-quick up wg0; then
+            echo "Couldn't start WireGuard interface! Probably CAPN_NET_ADMIN is missing." >&2
+            echo "Assuming running in Dockerfile, skipping ping test" >&2
+            SKIP_PING=yes
+        fi
     fi
     if [[ -n "${CREATE_SERVER}" && -z "${SERVER_PORT}" ]]; then
         SERVER_PORT=$(wg show "${WG_NAME}" | awk '/listening port/{print $3}')
         if [[ -z "${SERVER_PORT}" ]]; then
             echo "Warning: Could not determine ListenPort!" >&2
-            echo "You will have to set the ListenPort manually in ${WG_NETDEV}" >&2
+            echo "You will have to set the ListenPort manually in ${WG_CONF_TARGET}" >&2
         else
-            sed -i "s/ListenPort = /ListenPort = ${SERVER_PORT}/" "${WG_NETDEV}"
+            sed -i "s/ListenPort = /ListenPort = ${SERVER_PORT}/" "${WG_CONF_TARGET}"
         fi
     fi
 fi
