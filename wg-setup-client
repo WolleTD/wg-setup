@@ -11,6 +11,10 @@ error() {
     exit 1
 }
 
+has-systemd() {
+    command -v systemctl >/dev/null && systemctl is-system-running >/dev/null
+}
+
 usage() {
     cat <<EOF
 Usage: $0 [-fhst] [-d descr] [-e <endpoint>] [-g gateway] [-i <name>] [-p pubkey]
@@ -159,7 +163,8 @@ fi
 # This won't be queried if unset
 WG_NAME=${WG_NAME:-wg0}
 
-if [[ -z "${WG_QUICK_CONF}" ]] && systemctl is-enabled systemd-networkd.service >/dev/null; then
+if [[ -z "${WG_QUICK_CONF}" ]] && has-systemd &&
+        systemctl is-enabled systemd-networkd.service >/dev/null; then
     WG_BASENAME=${WG_BASENAME:-90-wireguard}
     WG_NETDEV=${WG_NETDEV:-/etc/systemd/network/${WG_BASENAME}.netdev}
     WG_NETWORK=${WG_NETWORK:-/etc/systemd/network/${WG_BASENAME}.network}
@@ -247,7 +252,9 @@ else
 fi
 
 # Enabling an already enabled service is a noop
-[[ -n "${WG_TEST}" ]] || systemctl enable "${SERVICE}"
+if [[ -z "${WG_TEST}" ]] && has-systemd; then
+    systemctl enable "${SERVICE}"
+fi
 
 if ! lsmod | grep ^wireguard >/dev/null && ! modprobe wireguard; then
     echo "Can't load WireGuard module! Probably the kernel got updated, please reboot!" >&2
@@ -256,7 +263,7 @@ if ! lsmod | grep ^wireguard >/dev/null && ! modprobe wireguard; then
         echo "You will have to set the ListenPort manually in ${WG_CONF_TARGET}" >&2
     fi
 else
-    if [[ -n "${WG_TEST}" ]] && systemctl is-system-running >/dev/null; then
+    if [[ -n "${WG_TEST}" ]] && has-systemd; then
         echo "${ACTION} ${SERVICE}"
         systemctl restart "${SERVICE}"
     elif [[ -n "${WG_TEST}" ]]; then
