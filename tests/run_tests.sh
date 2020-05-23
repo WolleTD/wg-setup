@@ -95,3 +95,10 @@ run_test remove-peer/args-success
 run_test remove-peer/args-y-success
 run_test remove-peer/args-error-pubkey-not-found
 run_test remove-peer/args-error-abort
+
+run_test list-peers/args-none
+run_test list-peers/args-hosts
+run_test list-peers/args-added
+run_test list-peers/args-pubkeys
+run_test list-peers/args-dns-zone
+run_test list-peers/args-invalid

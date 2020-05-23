@@ -231,7 +231,7 @@ cmd_list_peers() {
         /^AllowedIPs/{sub(/\/[0-9]+/,"",$3);printf("%-19s %s\n",$3,name)}' \
             ${NETDEV}
         ;;
-    added|added)
+    added)
         awk '/^\[WireGuardPeer\]$/{getline;if($1=="#"){
             if($2!="Added"){name=$2;getline;if($1=="#"&&$2=="Added"){comment=$0}}
             else{name="<none>";comment=$0}}}
