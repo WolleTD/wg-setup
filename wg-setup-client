@@ -32,8 +32,30 @@ EOF
     exit $1
 }
 
+# Adapted from https://stackoverflow.com/a/32690695/2208453
+ip2int() {
+    local a b c d
+    { IFS=. read a b c d; } <<< $1
+    echo $(( ( ( ( ( (a << 8) | b) << 8) | c) << 8) | d))
+}
+
+int2ip() {
+    local ui32=$1 ip n
+    for n in 0 8 16 24; do
+        ip=$(((ui32 & 0xff << $n) >> $n))${ip:+.${ip}}
+    done
+    echo $ip
+}
+
+network() {
+    local addr="$(ip2int $1)"
+    local mask="$((0xffffffff << (32 - $2)))"
+    int2ip $((addr & mask))
+}
+
 [[ $UID -eq 0 || -n "${WG_TEST}" ]] || error "Please run as root!"
-command -v wg >/dev/null || error "wg tool not found. Please install wireguard-tools first!"
+command -v wg >/dev/null || error "wg not found. Please install wireguard-tools first!"
+command -v nc >/dev/null || error "nc not found. Please install netcat!"
 
 OPTS=d:e:fg:hi:p:st
 LOPTS=descr:,endpoint:,force,gateway:,help,iface:,pubkey:,server,token
@@ -123,11 +145,7 @@ if [[ -z "${WG_CIDR}" ]]; then
 fi
 
 # Calculate network from IP address and CIDR
-WG_NET=$(echo "${IP_ADDRESS}" | awk -F. -v mask="${WG_CIDR}" \
-    '{u32addr=lshift($1,24)+lshift($2,16)+lshift($3,8)+$4;
-    for(i=31;mask>0;mask--){u32mask+=lshift(1,i--)};u32net=and(u32addr,u32mask);
-    printf("%d.%d.%d.%d\n",and(255,rshift(u32net,24)),and(255,rshift(u32net,16)),
-    and(255,rshift(u32net,8)),and(255,u32net))}')
+WG_NET=$(network "${IP_ADDRESS}" "${WG_CIDR}")
 
 # Stay safe and check parsed result
 [[ "${WG_NET}" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] ||
@@ -276,7 +294,7 @@ if [[ -n "${USETOKEN}" ]]; then
     if [[ "${RESPONSE##*: }" == "OK" ]]; then
         # Guess ping target from network address
         if [[ -z "${PING_GATEWAY}" ]]; then
-            PING_GATEWAY=$(echo "${WG_NET}" | awk -F. '{printf("%d.%d.%d.%d\n",$1,$2,$3,($4+1))}')
+            PING_GATEWAY=$(int2ip "$(($(ip2int "${WG_NET}") + 1))")
             guessed=yes
         fi
         echo "Success! Using ping target: ${PING_GATEWAY}"
