@@ -82,6 +82,7 @@ add_peer() {
     if [[ -z ${WG_TEST} && -e /sys/class/net/${WG_IFACE} ]]; then
         wg set "${WG_IFACE}" peer "${peer}" allowed-ips "${allowed_ips}"
     fi
+    run_hooks added "$name" "$peer" "$allowed_ips"
 }
 
 # Inner function for cmd_remove_peer
@@ -105,6 +106,10 @@ remove_peer() {
             [[ "${del}" == "y" || "${del}" == "Y" ]] || return 1
         fi
 
+        # Rerun the awk script to extract the peer data, we expect it to be a fine result now
+        read name pubkey ips < <(awk -v pk="${peer}" "${awkScript}" "${WG_NETDEV}" |
+            awk '/^# /&&!n{n=$2}/^PublicKey/{k=$3}/^AllowedIPs/{i=$3}END{print n,k,i}')
+
         # Remove from $WG_NETDEV
         tmpfile=$(mktemp "${WG_NETDEV}.XXXXXX")
         read fuid fgid fperms < <(stat -c "%u %g %a" "$WG_NETDEV")
@@ -121,6 +126,7 @@ remove_peer() {
         if [[ ${interface} && -e /sys/class/net/${interface} ]]; then
             wg set "${interface}" peer "${peer}" remove
         fi
+        run_hooks removed "$name" "$pubkey" "$ips"
         return 0
     elif [[ $? -eq 2 ]]; then
         echo "Multiple peers matching the search string found!" >&2
@@ -128,6 +134,13 @@ remove_peer() {
         echo "No peer matching the search string was found!" >&2
     fi
     return 1
+}
+
+run_hooks() {
+    [[ -d "${WG_SETUP_HOOK_DIR}" ]] || return 0
+    for file in ${WG_SETUP_HOOK_DIR}/*; do
+        [[ -x "${file}" ]] && "${file}" "$@"
+    done
 }
 
 usage() {
@@ -264,6 +277,8 @@ OPTS=f:hi:y
 LOPTS=file:,help,iface:,noconfirm
 PARSED_OPTS=$(getopt -o $OPTS -l $LOPTS -n "$0" -- "$@")
 eval set -- "$PARSED_OPTS"
+
+WG_SETUP_HOOK_DIR="${WG_SETUP_HOOK_DIR:-/etc/wg-setup}"
 
 while [[ "$1" != "--" ]]; do
     case $1 in

@@ -71,6 +71,14 @@ Currently, three formats are supported:
 * `pubkeys`: like `hosts` but with the pubkeys in a third column
 * `dns`: BIND zonefile format (only host lines, no header)
 
+### Hooks
+
+`wg-setup` provides a simple hook mechanism, which will call all executables in
+`WG_SETUP_HOOK_DIR` (which defaults to `/etc/wg-setup`) with these arguments:
+`added|removed <name> <public key> <allowed ips>`. This can be used to e.g. update
+a condensed list of hosts or a DNS zone. The example hooks don't even use the
+provided arguments, but simply call `list-peers` to get a full list each time.
+
 ### add-peer example
 
 ```

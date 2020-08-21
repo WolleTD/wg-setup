@@ -16,6 +16,7 @@ run_test() {
     else
         touch ${tmpdir}/infile
     fi
+    export WG_SETUP_HOOK_DIR="${test}"
     export WG_TEST_FILE=${tmpdir}/infile
     [[ -z "$group" ]] || chgrp $group "$WG_TEST_FILE"
 
@@ -84,6 +85,7 @@ run_test add-peer/interactive-error-pubkey-exists
 run_test add-peer/interactive-error-allowedips-exists
 
 run_test add-peer/args-success
+run_test add-peer/args-success-hooks
 run_test add-peer/args-y-success
 run_test add-peer/args-error-abort
 run_test add-peer/args-error-too-few-arguments
@@ -103,6 +105,7 @@ run_test remove-peer/interactive-success-noblank2
 run_test remove-peer/interactive-success-extra
 
 run_test remove-peer/args-success ${1:-users}
+run_test remove-peer/args-success-hooks
 run_test remove-peer/args-success-by-ip
 run_test remove-peer/args-success-by-name
 run_test remove-peer/args-y-success
