@@ -1,6 +1,5 @@
 Usage: wg-setup \[-y\] \[-f <file>\] <command> \[args\.\.\.\]
     -f <file>   systemd .netdev file to edit
-    -t <file>   wg-setup tokenlist to use
     -y          no confirmation required
 
 Commands:
@@ -10,19 +9,8 @@ Commands:
         Add the provided configuration to WireGuard interface
     remove-peer <public-key>
         Remove a peer from the WireGuard interface by PublicKey
-    new-token <name> <allowed-ips>
-        Generate a new random token for use with hostname <name> and ip address
-        <allowed-ips>\. Tokens are eight characters long Base32 strings
-    use-token <token> <public-key> <allowed-ips>
-        Test token and allowed-ips and on success, add public-key and allowed-ips
-        to WireGuard configuration
-    revoke-token <token>
-        Remove an existing token by it's Base32 value, e\.g\. when it got sent to the
-        wrong recipient
     list-peers \[format\]
         List all valid wg-setup peers \(those with a hostname\) known to WireGuard\.
         By default, a hosts-like list of addresses and hostnames is generated\.
         Available formats are: hosts, dnszone, csv
         All lists are sorted by AllowedIPs, only csv prints a pubkey-hostname-mapping\.
-    list-tokens
-        List generated, but unsed tokens of wg-setup

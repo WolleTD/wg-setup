@@ -14,7 +14,7 @@ error() {
 usage() {
     cat <<EOF
 Usage: $0 [-fhst] [-d descr] [-e <endpoint>] [-g gateway] [-i <name>] [-p pubkey]
-        [ip-addr] [token|port]
+        [ip-addr] [port (with -s)]
 
     -d,--descr      Description for .netdev (default: WireGuard VPN)
     -e,--endpoint   WireGuard endpoint of the Server
@@ -24,10 +24,8 @@ Usage: $0 [-fhst] [-d descr] [-e <endpoint>] [-g gateway] [-i <name>] [-p pubkey
     -i,--iface      name of the WireGuard interface to create (default: wg0)
     -p,--pubkey     WireGuard public key of the Server
     -s,--server     Create a server configuration (skip peer setup)
-    -t,--token      automatic setup with token
     ip-addr         ip address for this client
-    token           wg-setup token to use (implies -t)
-    port            listening port in --server mode, replaces token positional parameter
+    port            listening port in --server mode
 EOF
     exit $1
 }
@@ -57,8 +55,8 @@ network() {
 command -v wg >/dev/null || error "wg not found. Please install wireguard-tools first!"
 command -v nc >/dev/null || error "nc not found. Please install netcat!"
 
-OPTS=d:e:fg:hi:p:st
-LOPTS=descr:,endpoint:,force,gateway:,help,iface:,pubkey:,server,token
+OPTS=d:e:fg:hi:p:s
+LOPTS=descr:,endpoint:,force,gateway:,help,iface:,pubkey:,server
 PARSED_OPTS=$(getopt -o $OPTS -l $LOPTS -n "$0" -- "$@")
 eval set -- "$PARSED_OPTS"
 
@@ -95,10 +93,6 @@ while [[ "$1" != "--" ]]; do
         CREATE_SERVER=yes
         shift
         ;;
-    -t|--token)
-        USETOKEN=yes
-        shift
-        ;;
     *)
         echo "Programming error" >&2
         usage 1
@@ -109,15 +103,10 @@ shift # away the --
 
 # $1 is ip_addr
 [[ $# -ge 1 ]] && IP_ADDRESS="$1"
-[[ $# -ge 2 ]] && TOKEN="$2"
+[[ $# -ge 2 ]] && SERVER_PORT="$2"
 [[ $# -ge 3 ]] && usage 1
-[[ -n "${TOKEN}" ]] && USETOKEN=yes
 
-if [[ -n "${CREATE_SERVER}" ]]; then
-    [[ -z "${USETOKEN}" ]] || echo "Warning: Creating server configuration, ignoring token!"
-    [[ -n "${TOKEN}" ]] && SEVER_PORT="${TOKEN}"
-    unset USETOKEN TOKEN
-fi
+[[ -z "${CREATE_SERVER}" && -n "${SERVER_PORT}" ]] && usage 1
 
 if [[ -z "${IP_ADDRESS}" ]]; then
     [[ -z "${CREATE_SERVER}" ]] && echo -n "Enter ip address for this client: "
@@ -276,46 +265,6 @@ else
     fi
 fi
 
-if [[ -n "${USETOKEN}" ]]; then
-    if [[ -z "${TOKEN}" ]]; then
-        echo "Enter token for ${IP_ADDRESS} on ${WG_ENDPOINT}:"
-        read -r TOKEN
-    else
-        echo "Wait 1s for systemd-resolved"
-        sleep 1
-    fi
-
-    [[ "${TOKEN}" =~ ^[A-Z2-7]{8}$ ]] || error "Invalid token format!"
-
-    REQUEST="${TOKEN}\n${PUBLIC_KEY}\n${IP_ADDRESS}"
-    echo "Connecting to tcp://${WG_ENDPOINT}"
-    RESPONSE=$(echo -e "${REQUEST}" | nc ${WG_ENDPOINT/:/ })
-
-    if [[ "${RESPONSE##*: }" == "OK" ]]; then
-        # Guess ping target from network address
-        if [[ -z "${PING_GATEWAY}" ]]; then
-            PING_GATEWAY=$(int2ip "$(($(ip2int "${WG_NET}") + 1))")
-            guessed=yes
-        fi
-        echo "Success! Using ping target: ${PING_GATEWAY}"
-        if ping -c1 "${PING_GATEWAY}" >/dev/null; then
-            echo "Ping successful! WireGuard VPN setup complete!"
-        elif [[ -n "${guessed}" ]]; then
-            echo -e "\e[31mPing failed, maybe the server isn't behind ${PING_GATEWAY}?\e[m"
-            exit 1
-        else
-            echo -e "\e[31mPing to ${PING_GATEWAY} failed! Check configuration!\e[m"
-            exit 1
-        fi
-        exit 0
-    else
-        echo -e "\e[31mERROR: Could not add to server! Configuration:\e[m
-[${WG_NETDEV:+WireGuard}Peer]
-PublickKey = ${PUBLIC_KEY}
-AllowedIPs = ${IP_ADDRESS}/32"
-        exit 1
-    fi
-fi
 if [[ -z "${CREATE_SERVER}" ]]; then
     echo "============================================================
 WireGuard setup successful! Server side peer configuration:

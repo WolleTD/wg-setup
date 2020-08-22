@@ -1,5 +1,0 @@
-Add wg-setup tokens to /tmp/tmp\..+/toklist
-Name: AllowedIPs: A peer with this AllowedIPs already exists!
-Name: AllowedIPs: 
-[A-Z2-7]{8}		172\.16\.1\.2/32		peer2
-Add another token\? \[y/N\] 

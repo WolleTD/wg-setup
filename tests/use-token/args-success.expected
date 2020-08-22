@@ -1,6 +1,0 @@
-\[WireGuardPeer\]
-# peer1
-# Added by [[:alnum:]_-]+ at [0-9]{4}-[0-9]{2}-[0-9]{2}
-PublicKey = aWosQEdndReq6diLeGq2BKKl0fFGA7v/3Qbwu9pbYxg=
-AllowedIPs = 172\.16\.1\.1/32
-
