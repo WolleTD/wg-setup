@@ -289,10 +289,8 @@ fi
 
 if [[ -z "${CREATE_SERVER}" ]]; then
     echo "============================================================
-WireGuard setup successful! Server side peer configuration:
-[${WG_NETDEV:+WireGuard}Peer]
-PublickKey = ${PUBLIC_KEY}
-AllowedIPs = ${IP_ADDRESS}/32"
+WireGuard setup successful! Server side add-peer command:
+wg-setup add-peer ${HOSTNAME} ${PUBLIC_KEY} ${IP_ADDRESS}"
     exit 0
 else
     echo "============================================================
