@@ -55,9 +55,7 @@ network() {
     int2ip $((addr & mask))
 }
 
-[[ $UID -eq 0 || -n "${WG_TEST}" ]] || error "Please run as root!"
 command -v wg >/dev/null || error "wg not found. Please install wireguard-tools first!"
-command -v nc >/dev/null || error "nc not found. Please install netcat!"
 
 OPTS=d:e:fg:hi:p:s
 LOPTS=descr:,endpoint:,force,gateway:,help,iface:,pubkey:,server
@@ -111,6 +109,8 @@ shift # away the --
 [[ $# -ge 3 ]] && usage 1
 
 [[ -z "${CREATE_SERVER}" && -n "${SERVER_PORT}" ]] && usage 1
+
+[[ $UID -eq 0 || -n "${WG_TEST}" ]] || error "Please run as root!"
 
 if [[ -z "${IP_ADDRESS}" ]]; then
     [[ -z "${CREATE_SERVER}" ]] && echo -n "Enter ip address for this client: "
