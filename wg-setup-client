@@ -263,7 +263,7 @@ if ! lsmod | grep ^wireguard >/dev/null && ! modprobe wireguard; then
         echo "You will have to set the ListenPort manually in ${WG_CONF_TARGET}" >&2
     fi
 else
-    if [[ -n "${WG_TEST}" ]] && has-systemd; then
+    if [[ -z "${WG_TEST}" ]] && has-systemd; then
         echo "${ACTION} ${SERVICE}"
         systemctl restart "${SERVICE}"
     elif [[ -n "${WG_TEST}" ]]; then
