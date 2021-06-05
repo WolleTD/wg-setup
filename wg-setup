@@ -314,7 +314,7 @@ else
     WG_IFACE=${WG_IFACE:-wg0}
     if [[ -z "${WG_TEST_FILE}" ]]; then
         WG_QUICK="/etc/wireguard/${WG_IFACE}.conf"
-        WG_NETDEV=$(! grep -lR "${WG_IFACE}" /etc/systemd/network/*.netdev 2>/dev/null)
+        WG_NETDEV=$(grep -lR "${WG_IFACE}" /etc/systemd/network/*.netdev 2>/dev/null || true)
         if [[ -f "${WG_QUICK}" && -f "${WG_NETDEV}" ]]; then
             # Only check if systemd-networkd is enabled, as wg-quick will run without any
             # service unit in a container
