@@ -1,0 +1,23 @@
+name: Tests
+
+on: [ push ]
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Run tests
+      working-directory: ${{github.workspace}}/tests
+      run: ./run_tests.sh
+
+  docker-setup:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Build image
+      run: docker build . --tag wg-setup:latest
+    - run: sudo modprobe wireguard
+    - name: Run docker test
+      working-directory: ${{github.workspace}}/tests
+      run: ./docker.sh
