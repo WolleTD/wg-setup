@@ -4,7 +4,7 @@ script_dir="${BASH_SOURCE[0]%/*}"
 DESTDIR=${DESTDIR:-/usr/local}
 SYSTEMD_UNIT=/etc/systemd/system/wg-setup.service
 
-install() {
+install-wgs() {
     echo "Install ${DESTDIR}/bin/wg-setup"
     install -m755 ${script_dir}/wg-setup ${DESTDIR}/bin/wg-setup
 }
@@ -13,30 +13,19 @@ wireguard() {
     echo "Setting up WireGuard server using wg-setup-client"
     ${script_dir}/wg-setup-client --server "$@"
     echo "Installing wg-setup"
-    install
+    install-wgs
 }
 
 uninstall() {
     echo "Remove ${DESTDIR}/bin/wg-setup"
     rm -f ${DESTDIR}/bin/wg-setup
-    rm -f ${DESTDIR}/bin/wg-setup-service
-    rm -f ${DESTDIR}/bin/wg-setup-use-token
-    if [[ -f "${SYSTEMD_UNIT}" ]]; then
-        systemctl disable --now wg-setup.service
-        rm -f "${SYSTEMD_UNIT}"
-        systemctl daemon-reload
-    fi
-    rm -f /etc/sudoers.d/wg-setup
-    if id wg-setup >/dev/null 2>&1; then
-        userdel -r wg-setup 2>/dev/null
-    fi
 }
 
 cmd=${1:-install}
 
 case "${cmd}" in
-install|full)
-    install-full
+install)
+    install-wgs
     ;;
 uninstall|remove)
     uninstall

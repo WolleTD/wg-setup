@@ -12,7 +12,11 @@ error() {
 }
 
 has-systemd() {
-    command -v systemctl >/dev/null && systemctl is-system-running >/dev/null
+    command -v systemctl >/dev/null
+}
+
+systemd-booted() {
+    [[ -d /run/systemd/system ]]
 }
 
 usage() {
@@ -163,8 +167,8 @@ fi
 # This won't be queried if unset
 WG_NAME=${WG_NAME:-wg0}
 
-if [[ -z "${WG_QUICK_CONF}" ]] && has-systemd &&
-        systemctl is-enabled systemd-networkd.service >/dev/null; then
+if has-systemd && systemctl is-enabled systemd-networkd.service >/dev/null; then
+    echo "Using systemd-networkd for configuration" >&2
     WG_BASENAME=${WG_BASENAME:-90-wireguard}
     WG_NETDEV=${WG_NETDEV:-/etc/systemd/network/${WG_BASENAME}.netdev}
     WG_NETWORK=${WG_NETWORK:-/etc/systemd/network/${WG_BASENAME}.network}
@@ -174,6 +178,7 @@ if [[ -z "${WG_QUICK_CONF}" ]] && has-systemd &&
     [[ -f "${WG_NETWORK}" && -z "${FORCE}" ]] &&
         error "${WG_NETWORK} already exists (use -f to overwrite)!"
 else
+    echo "Using wg-quick for configuration" >&2
     [[ -z "${CREATE_SERVER}" ]] ||
         echo "Warning: wg-setup can only manage systemd-networkd servers!"
     WG_QUICK_CONF=${WG_QUICK_CONF:-/etc/wireguard/${WG_NAME}.conf}
@@ -263,13 +268,15 @@ if ! lsmod | grep ^wireguard >/dev/null && ! modprobe wireguard; then
         echo "You will have to set the ListenPort manually in ${WG_CONF_TARGET}" >&2
     fi
 else
-    if [[ -z "${WG_TEST}" ]] && has-systemd; then
+    if [[ -n "${WG_TEST}" ]]; then
+        echo "Testing: Skipping ${ACTION} ${SERVICE}." >&2
+    elif has-systemd && systemd-booted; then
         echo "${ACTION} ${SERVICE}"
         systemctl restart "${SERVICE}"
-    elif [[ -n "${WG_TEST}" ]]; then
-        echo "Testing: Skipping ${ACTION} ${SERVICE}."
+    elif has-systemd; then
+        echo "systemd not booted, skipping ${ACTION} ${SERVICE}." >&2
     else
-        echo "Installing in container: Running wg-quick up ${WG_IFACE}"
+        echo "Installing without systemd: Running wg-quick up ${WG_IFACE}"
         if ! wg-quick up wg0; then
             echo "Couldn't start WireGuard interface! Probably CAPN_NET_ADMIN is missing." >&2
             echo "Assuming running in Dockerfile, skipping ping test" >&2
