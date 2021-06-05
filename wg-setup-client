@@ -21,13 +21,12 @@ systemd-booted() {
 
 usage() {
     cat <<EOF
-Usage: $0 [-fhst] [-d descr] [-e <endpoint>] [-g gateway] [-i <name>] [-p pubkey]
+Usage: $0 [-fhst] [-d descr] [-e <endpoint>] [-i <name>] [-p pubkey]
         [ip-addr] [port (with -s)]
 
     -d,--descr      Description for .netdev (default: WireGuard VPN)
     -e,--endpoint   WireGuard endpoint of the Server
     -f,--force      overwrite existing files
-    -g,--gateway    Internal IP of the server for ping test (default: Network+1)
     -h,--help       Show this usage text
     -i,--iface      name of the WireGuard interface to create (default: wg0)
     -p,--pubkey     WireGuard public key of the Server
@@ -61,8 +60,8 @@ network() {
 
 command -v wg >/dev/null || error "wg not found. Please install wireguard-tools first!"
 
-OPTS=d:e:fg:hi:p:s
-LOPTS=descr:,endpoint:,force,gateway:,help,iface:,pubkey:,server
+OPTS=d:e:fhi:p:s
+LOPTS=descr:,endpoint:,force,help,iface:,pubkey:,server
 PARSED_OPTS=$(getopt -o $OPTS -l $LOPTS -n "$0" -- "$@")
 eval set -- "$PARSED_OPTS"
 
@@ -79,10 +78,6 @@ while [[ "$1" != "--" ]]; do
     -f|--force)
         FORCE=yes
         shift
-        ;;
-    -g|--gateway)
-        PING_GATEWAY="$2"
-        shift 2
         ;;
     -h|--help)
         usage
@@ -179,8 +174,6 @@ if has-systemd && systemctl is-enabled systemd-networkd.service >/dev/null; then
         error "${WG_NETWORK} already exists (use -f to overwrite)!"
 else
     echo "Using wg-quick for configuration" >&2
-    [[ -z "${CREATE_SERVER}" ]] ||
-        echo "Warning: wg-setup can only manage systemd-networkd servers!"
     WG_QUICK_CONF=${WG_QUICK_CONF:-/etc/wireguard/${WG_NAME}.conf}
     [[ -f "${WG_QUICK_CONF}" && -z "${FORCE}" ]] &&
         error "${WG_QUICK_CONF} already exists (use -f to overwrite)!"
@@ -278,9 +271,7 @@ else
     else
         echo "Installing without systemd: Running wg-quick up ${WG_IFACE}"
         if ! wg-quick up wg0; then
-            echo "Couldn't start WireGuard interface! Probably CAPN_NET_ADMIN is missing." >&2
-            echo "Assuming running in Dockerfile, skipping ping test" >&2
-            SKIP_PING=yes
+            echo "Couldn't start WireGuard interface! Probably CAP_NET_ADMIN is missing (if running in a container)." >&2
         fi
     fi
     if [[ -n "${CREATE_SERVER}" && -z "${SERVER_PORT}" ]]; then
