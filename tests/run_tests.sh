@@ -2,6 +2,7 @@
 
 run_test() {
     local test=$1
+    local group=$2
     local command=${test%%/*}
     local has_stdin=0 expres=0 error=0
     local args regexp res
@@ -16,6 +17,7 @@ run_test() {
         touch ${tmpdir}/infile
     fi
     export WG_TEST_FILE=${tmpdir}/infile
+    [[ -z "$group" ]] || chgrp $group "$WG_TEST_FILE"
 
     if [[ $has_stdin -eq 1 ]]; then
         ! wg-setup ${command} ${args} <${test}.stdin 1>${tmpdir}/stdout 2>${tmpdir}/stderr
@@ -23,6 +25,13 @@ run_test() {
         ! wg-setup ${command} ${args} 1>${tmpdir}/stdout 2>${tmpdir}/stderr
     fi
     res=${PIPESTATUS[0]}
+    if [[ -n "$group" ]]; then
+        actualGroup="$(stat -c "%G" "$WG_TEST_FILE")"
+        if [[ "$group" != "$actualGroup"  ]]; then
+            echo "Test ${test} failed: Group $actualGroup doesn't match expected group $group!"
+            error=1
+        fi
+    fi
     [[ -f ${test}.result ]] && expres=$(<${test}.result)
     if [[ $res -ne $expres ]]; then
         echo "Test ${test} failed: Exit code $res doesn't match expected exit code $expres!"
@@ -91,7 +100,7 @@ run_test remove-peer/interactive-success-noblank
 run_test remove-peer/interactive-success-noblank2
 run_test remove-peer/interactive-success-extra
 
-run_test remove-peer/args-success
+run_test remove-peer/args-success ${1:-users}
 run_test remove-peer/args-y-success
 run_test remove-peer/args-error-pubkey-not-found
 run_test remove-peer/args-error-abort

@@ -89,7 +89,7 @@ remove_peer() {
     local peer="$1"
 
     # Always print portion that is removed to stdout
-    if gawk -v pk="${peer}" \
+    if awk -v pk="${peer}" \
         '{ l[++n]=$0 }
         /^\[(WireGuard)?Peer\]$/ { if(f){ for(i=1;i<n;i++){ print l[i] } if(n>1){print ""} }
             delete l;n=1;f=0;l[n]=$0 }
@@ -105,14 +105,19 @@ remove_peer() {
         fi
 
         # Remove from $WG_NETDEV
-        gawk -i inplace -v pk="${peer}" \
+        tmpfile=$(mktemp "${WG_NETDEV}.XXXXXX")
+        read fuid fgid fperms < <(stat -c "%u %g %a" "$WG_NETDEV")
+        awk -v pk="${peer}" \
             '{ l[++n]=$0 }
             /^\[(WireGuard)?Peer\]$/ { if(!f){ for(i=1;i<n;i++){ print l[i] } if(n>1){print ""}}
                 delete l;n=1;f=0;l[n]=$0 }
             /^PublicKey/ { if($3==pk){ f=1;fs=1 } }
             /^$/ { if(!f){ for(i=1;i<=n;i++){ print l[i] } } delete l;n=0;f=0 }
             END { exit !fs }' \
-            "${WG_NETDEV}"
+            "${WG_NETDEV}" > "$tmpfile"
+        chmod "$fperms" "$tmpfile"
+        chown "$fuid:$fgid" "$tmpfile"
+        mv "$tmpfile" "$WG_NETDEV"
 
         # Find interface in $WG_NETDEV
         local interface
@@ -288,11 +293,6 @@ while [[ "$1" != "--" ]]; do
     esac
 done
 shift # away the --
-
-if ! command -v gawk >/dev/null; then
-    echo "Error: wg-setup requires gawk!" >&2
-    exit 1
-fi
 
 # With an interface, wg-setup will automatically find the target
 # configuration file and won't accept any -f argument
