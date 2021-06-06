@@ -145,10 +145,9 @@ Commands:
     list-peers [format]
         List all valid wg-setup peers (those with a hostname) known to WireGuard.
         By default, a hosts-like list of addresses and hostnames is generated.
-        Available formats are: hosts, dnszone, csv
-        All lists are sorted by AllowedIPs, only csv prints a pubkey-hostname-mapping.
+        Available formats are: $LIST_FORMATS
 EOF
-    exit "$1"
+    exit $1
 }
 
 cmd_add_peer() {
@@ -158,6 +157,9 @@ cmd_add_peer() {
     elif [[ $# -gt 0 && $# -lt 3 ]]; then
         echo "Error: Too few arguments!" >&2
         usage 1
+    elif [[ $UID -ne 0 && ! ${WG_TEST} ]]; then
+        echo "Error: Must be root to add new peers!" >&2
+        return 1
     fi
     NAME=$1
     PEER=$2
@@ -195,6 +197,9 @@ cmd_remove_peer() {
     if [[ $# -gt 1 ]]; then
         echo "Error: Too many arguments!" >&2
         usage 1
+    elif [[ $UID -ne 0 && ! ${WG_TEST} ]]; then
+        echo "Error: Must be root to remove peers!" >&2
+        return 1
     fi
     PEER=$1
 
@@ -215,6 +220,7 @@ cmd_remove_peer() {
     fi
 }
 
+LIST_FORMATS="hosts, added, pubkeys, dns-zone"
 cmd_list_peers() {
     if [[ $# -gt 1 ]]; then
         echo "Error: Too many arguments!" >&2
@@ -246,9 +252,8 @@ cmd_list_peers() {
             ${WG_NETDEV}
         ;;
     *)
-        [[ "${FORMAT}" == "help" ]] || echo "Error: Unknown format ${FORMAT}!"
-        echo "Available formats: hosts,added,pubkeys,dns-zone"
-        [[ "${FORMAT}" == "help" ]]
+        echo "Available formats: $LIST_FORMATS"
+        [[ "${FORMAT}" == "help" ]] || { echo "Error: Unknown format ${FORMAT}!"; return 1; }
         ;;
     esac
 }
@@ -284,6 +289,11 @@ while [[ "$1" != "--" ]]; do
 done
 shift # away the --
 
+if ! command -v gawk >/dev/null; then
+    echo "Error: wg-setup requires gawk!" >&2
+    exit 1
+fi
+
 # With an interface, wg-setup will automatically find the target
 # configuration file and won't accept any -f argument
 if [[ -n "${WG_IFACE}" && -n "${WG_NETDEV}" ]]; then
@@ -314,7 +324,7 @@ else
     WG_IFACE=${WG_IFACE:-wg0}
     if [[ -z "${WG_TEST_FILE}" ]]; then
         WG_QUICK="/etc/wireguard/${WG_IFACE}.conf"
-        WG_NETDEV=$(! grep -lR "${WG_IFACE}" /etc/systemd/network/*.netdev 2>/dev/null)
+        WG_NETDEV=$(grep -lR "${WG_IFACE}" /etc/systemd/network/*.netdev 2>/dev/null || true)
         if [[ -f "${WG_QUICK}" && -f "${WG_NETDEV}" ]]; then
             # Only check if systemd-networkd is enabled, as wg-quick will run without any
             # service unit in a container
@@ -337,16 +347,16 @@ cmd="$1"; shift || usage 1
 # $1 is name, $2 is peer, $3 is allowed-ips
 
 case "${cmd}" in
-    add-peer)
+    add-peer|a*)
         cmd_add_peer "$@"
         ;;
-    remove-peer)
+    remove-peer|r|rm|rmp*|rem*)
         cmd_remove_peer "$@"
         ;;
-    list-peers)
+    list-peers|ls|lsp*|lp|list-p*)
         cmd_list_peers "$@"
         ;;
-    help)
+    help|h*)
         usage 0
         ;;
     *)

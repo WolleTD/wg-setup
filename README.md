@@ -1,7 +1,13 @@
 # wg-setup WireGuard Management
 
-wg-setup was designed to simplify the setup of WireGuard when handling larger amounts of
-clients. The server-side tools only support `systemd-networkd`-backed WireGuard interfaces.
+I designed `wg-setup` to simplify the setup of WireGuard when handling large amounts of
+clients. The server-side tool was initially built for use with systemd-networkd, but I
+added wg-quick support to be able to test it in containers.
+
+The `wg-setup-client` tool will use systemd-networkd as well to configure WireGuard, if
+the service is enabled. Otherwise, it will fall back to wg-quick (but still enable a systemd
+service for that, if systemd is available). Despite it's name, it's also capable of setting
+up servers, as a WireGuard server is just a peer with a fixed listening port.
 
 ## Quick example
 
@@ -23,31 +29,46 @@ Client:
 $ gpg --recv-keys FB9DA662
 $ curl -O https://raw.githubusercontent.com/WolleTD/wg-setup/$ref/wg-setup-client
 $ curl -O https://raw.githubusercontent.com/WolleTD/wg-setup/$ref/wg-setup-client.sig
-$ gpg --verify wg-setup-client.sig && chmod +x setup-wg-quick
-
-$ sudo ./setup-wg-quick -e vpn.example.com:12345 -p Vq12...3a4= 172.16.1.10/16
+$ gpg --verify wg-setup-client.sig && chmod +x wg-setup-client
 ...
+gpg: Good signature ...
+$ sudo ./wg-setup-client -e vpn.example.com:12345 -p Vq12...3a4= 172.16.1.10/16
+...
+============================================================
+WireGuard setup successful! Server side add-peer command:
+wg-setup add-peer my_hostname my_publickey 172.16.1.10
 ```
 
-## Manage peers manually
+Paste the last line printed by `wg-setup-client` in a terminal on the server and you're done.
 
-A WireGuard interface and thus a WireGuard server is usually configured in a
-root-private file, also the running interface has to restarted or configured separately to the
-file for the change to take effect.
+## Manage peers with `wg-setup`
 
-This is tedious and error-prone, so `wg-setup` provides `add-peer` and `remove-peer` commands.
+A WireGuard interface and thus a WireGuard server is usually configured in a file only editable
+by root, also the running interface has to be restarted or configured separately to the file for
+the change to take effect.
+Doing this manually is tedious and error-prone, so `wg-setup` provides `add-peer` and `remove-peer`
+commands to make this easier and safer.
+`wg-setup` always updates both the interface and the backing configuration files and provides
+an input validation layer for the file content.
 
-### add-peer
+While `wg-quick` supports an additional `SaveConfig` parameter, this only exports the running
+interface configuration upon wg-quick shutdown, carrying the risk of losing new peer configuration
+if the service or machine terminates abnormally.
+Also, it simply doesn't work with `systemd-networkd`.
 
- - input validation
- - force a valid hostname as comment on every peer
- - use a default CIDR of `/32` for AllowedIPs
- - keep configuration file and interface in sync
- - print added configuration to stdout
- - ask for confirmation, except -y is passed
- - interactive input with no arguments
+The `add-peer` command expects a hostname in addition to public key and IP address. This hostname
+is stored in the configuration file as a comment, has to be unique and can be read by the
+`list-peers` command.
+If the IP address is supplied without mask suffix, it will be defaulted to /32.
 
-Example:
+Both commands are interactive if no arguments are provided and confirmation can be skipped with
+the `-y` option.
+
+_TODO: `remove-peer` currently only accepts public keys, which is needlessly complex as both
+the hostname and IP address are unique as well._
+
+### add-peer example
+
 ```
 $ wg-setup add-peer my-peer iCJSinvalidCG2/WP9D1/viGlv+WrNpWtd1XkRzyrFs= 172.16.0.10
 [WireGuardPeer]
@@ -59,14 +80,8 @@ AllowedIPs = 172.16.0.10/32
 Add this configuration to /etc/systemd/network/90-wireguard.netdev? [Y/n]
 ```
 
-### remove-peer
+### remove-peer example
 
- - input validation
- - keep configuration file and interface in sync
- - print removed configuration to stdout
- - ask for confirmation, except -y is passed
-
-Example:
 ```
 $ wg-setup remove-peer iCJSinvalidCG2/WP9D1/viGlv+WrNpWtd1XkRzyrFs=
 [WireGuardPeer]
@@ -82,7 +97,7 @@ Remove this configuration from /etc/systemd/network/90-wireguard.netdev? [y/N]
 
 _(work in progress)_
 
-## wg-setup-client: Setup clients
+## Setup clients with `wg-setup-client`
 
 This is kind of a companion script. Where `wg-setup` shall help managing larger WireGuard
 networks, a large amount of clients has to be setup as well.
@@ -93,7 +108,7 @@ sudo ./wg-setup-client -e <server-endpoint> -p <server-pubkey> <ip-address>
 ```
 
 - If `<ip-address>` is specified without prefix-length, `/24` is used
-- If `-e` or `-p` is missing, the values are queried interactively
+- If any of the three required parameters is missing, the values are queried interactively
 - See `--help` for more options
 
 ##### Security
@@ -110,17 +125,6 @@ gpg --verify wg-setup-client.sig && chmod +x setup-wg-quick
 ```
 
 ---
-
-### Windows/MacOS
-
-Take your wg-quick template minus the first two lines. Paste into connection editor in the
-WireGuard UI and customize the IP address for the client. Click Save, click Activate. Add
-PublicKey and IP address to the server. VPN done.
-
-Alternatively, generate configurations locally with a modified `setup-wg-quick` (no root,
-different output files, no service stuff) and distribute them. The UI clients allow importing.
-On the other hand, please don't send private keys over insecure connections, like the internet
-in general.
 
 ## License
 
