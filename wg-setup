@@ -64,7 +64,7 @@ add_peer() {
 
     CONFIG="[${IS_NETDEV:+WireGuard}Peer]\n"
     CONFIG+="# ${name}\n"
-    CONFIG+="# Added by ${SUDO_USER:-${USER}} at $(date +%F)\n"
+    CONFIG+="# Added by ${SUDO_USER:-$(id -un)} at $(date +%F)\n"
     CONFIG+="PublicKey = ${peer}\n"
     CONFIG+="AllowedIPs = ${allowed_ips}\n"
 
