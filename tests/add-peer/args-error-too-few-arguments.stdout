@@ -12,5 +12,4 @@ Commands:
     list-peers \[format\]
         List all valid wg-setup peers \(those with a hostname\) known to WireGuard\.
         By default, a hosts-like list of addresses and hostnames is generated\.
-        Available formats are: hosts, dnszone, csv
-        All lists are sorted by AllowedIPs, only csv prints a pubkey-hostname-mapping\.
+        Available formats are: hosts, added, pubkeys, dns-zone
