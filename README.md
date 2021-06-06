@@ -123,10 +123,3 @@ curl -O https://raw.githubusercontent.com/WolleTD/wg-setup/$ref/wg-setup-client
 curl -O https://raw.githubusercontent.com/WolleTD/wg-setup/$ref/wg-setup-client.sig
 gpg --verify wg-setup-client.sig && chmod +x setup-wg-quick
 ```
-
----
-
-## License
-
-CC-BY-SA, I guess... These are hacky scripts. Read and understand them before you use them,
-that's all I'm asking for. Also, recommend them if you like them.
