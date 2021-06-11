@@ -92,6 +92,8 @@ run_test add-peer/args-error-pubkey-exists
 run_test add-peer/args-error-allowedips-exists
 
 run_test remove-peer/interactive-success
+run_test remove-peer/interactive-success-by-ip
+run_test remove-peer/interactive-success-by-name
 run_test remove-peer/interactive-y-success
 run_test remove-peer/interactive-error-pubkey-not-found
 run_test remove-peer/interactive-error-abort
@@ -101,8 +103,11 @@ run_test remove-peer/interactive-success-noblank2
 run_test remove-peer/interactive-success-extra
 
 run_test remove-peer/args-success ${1:-users}
+run_test remove-peer/args-success-by-ip
+run_test remove-peer/args-success-by-name
 run_test remove-peer/args-y-success
 run_test remove-peer/args-error-pubkey-not-found
+run_test remove-peer/args-error-multiple
 run_test remove-peer/args-error-abort
 
 run_test list-peers/args-none

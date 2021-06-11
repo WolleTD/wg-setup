@@ -58,14 +58,11 @@ Also, it simply doesn't work with `systemd-networkd`.
 
 The `add-peer` command expects a hostname in addition to public key and IP address. This hostname
 is stored in the configuration file as a comment, has to be unique and can be read by the
-`list-peers` command.
+`list-peers` and `remove-peer` commands.
 If the IP address is supplied without mask suffix, it will be defaulted to /32.
 
 Both commands are interactive if no arguments are provided and confirmation can be skipped with
 the `-y` option.
-
-_TODO: `remove-peer` currently only accepts public keys, which is needlessly complex as both
-the hostname and IP address are unique as well._
 
 `list-peers` provides a convenient way to export the client list into some other format.
 Currently, three formats are supported:
@@ -90,7 +87,7 @@ Add this configuration to /etc/systemd/network/90-wireguard.netdev? [Y/n]
 ### remove-peer example
 
 ```
-$ wg-setup remove-peer iCJSinvalidCG2/WP9D1/viGlv+WrNpWtd1XkRzyrFs=
+$ wg-setup remove-peer 172.16.0.10
 [WireGuardPeer]
 # my-peer
 # Added by wolle at 2020-05-20

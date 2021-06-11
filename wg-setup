@@ -92,8 +92,10 @@ remove_peer() {
             if ((f && !r) || (!f && r)) { for (i=1;i<n;i++) { print l[i] } if (n>1) { print "" } }
             delete l; n=(NF > 0); f=0; l[n]=$0
         }
-        /^PublicKey/ { if($3==pk){ f=1;fs=1 } }
-        END { exit !fs }'
+        /^PublicKey/ { if($3==pk){ f=1; if(fs){m=1} fs=1 } }
+        /^# / { if($2==pk) { f=1; if(fs){m=1} fs=1 } }
+        /^AllowedIPs/ { if(index($3,pk)) { f=1; if(fs){m=1} fs=1 } }
+        END { if(m){ exit 2 }else{ exit !fs } }'
 
     # Always print portion that is removed to stdout
     if awk -v pk="${peer}" "${awkScript}" "${WG_NETDEV}"; then
@@ -120,10 +122,12 @@ remove_peer() {
             wg set "${interface}" peer "${peer}" remove
         fi
         return 0
+    elif [[ $? -eq 2 ]]; then
+        echo "Multiple peers matching the search string found!" >&2
     else
-        echo "No peer with this PublicKey was found!" >&2
-        return 1
+        echo "No peer matching the search string was found!" >&2
     fi
+    return 1
 }
 
 usage() {
@@ -137,8 +141,8 @@ Commands:
 
     add-peer <name> <public-key> <allowed-ips>
         Add the provided configuration to WireGuard interface
-    remove-peer <public-key>
-        Remove a peer from the WireGuard interface by PublicKey
+    remove-peer <public-key|name|ip-address>
+        Remove a peer from the WireGuard interface
     list-peers [format]
         List all valid wg-setup peers (those with a hostname) known to WireGuard.
         By default, a hosts-like list of addresses and hostnames is generated.
@@ -206,7 +210,7 @@ cmd_remove_peer() {
 
         cont="y"
         while [[ "${cont}" == "y" || "${cont}" == "Y" ]]; do
-            echo -n "Enter PublicKey: "
+            echo -n "Enter PublicKey/Hostname/IPAddress: "
             read -r peer
             ! remove_peer "${peer}" 2>&1
             echo -n "Remove another peer? [y/N] "
