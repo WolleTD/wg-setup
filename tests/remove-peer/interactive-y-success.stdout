@@ -1,5 +1,5 @@
 Remove WireGuard peer\(s\) from /tmp/tmp\.[[:alnum:]]+/infile
-Enter PublicKey: \[WireGuardPeer\]
+Enter PublicKey/Hostname/IPAddress: \[WireGuardPeer\]
 # peer2
 # Added by wolle at 2020-03-01
 PublicKey = iCJSbobpCRHCG2/WP9D1/viGlv\+WrNpWtd1XkRzyrFs=

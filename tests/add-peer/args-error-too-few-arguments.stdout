@@ -7,8 +7,8 @@ Commands:
 
     add-peer <name> <public-key> <allowed-ips>
         Add the provided configuration to WireGuard interface
-    remove-peer <public-key>
-        Remove a peer from the WireGuard interface by PublicKey
+    remove-peer <public-key|name|ip-address>
+        Remove a peer from the WireGuard interface
     list-peers \[format\]
         List all valid wg-setup peers \(those with a hostname\) known to WireGuard\.
         By default, a hosts-like list of addresses and hostnames is generated\.

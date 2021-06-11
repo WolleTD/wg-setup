@@ -112,9 +112,13 @@ shift # away the --
 [[ $UID -eq 0 || -n "${WG_TEST}" ]] || error "Please run as root!"
 
 if [[ -z "${IP_ADDRESS}" ]]; then
-    [[ -z "${CREATE_SERVER}" ]] && echo -n "Enter ip address for this client: "
-    [[ -n "${CREATE_SERVER}" ]] && echo -n "Enter server ip address: "
+    [[ -z "${CREATE_SERVER}" ]] && echo -n "Enter ip address for this client: " \
+                                || echo -n "Enter server ip address: "
     read -r IP_ADDRESS
+fi
+if [[ -n "${CREATE_SERVER}" && -z "${SERVER_PORT}" ]]; then
+    echo -n "Enter server listening port (empty: random port): "
+    read -r SERVER_PORT
 fi
 
 [[ "${IP_ADDRESS}" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}(/[0-9]{1,2})?$ ]] ||

@@ -1,6 +1,7 @@
 #!/bin/bash
 set -e
 
+docker build -t wg-setup:latest ..
 shared=$(mktemp -d)
 echo "Setting up WireGuard server..."
 docker run -d --name wg-server --rm --cap-add NET_ADMIN -v ${shared}:/var/lib/wg-setup \

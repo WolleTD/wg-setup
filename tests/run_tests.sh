@@ -2,6 +2,7 @@
 
 run_test() {
     local test=$1
+    local group=$2
     local command=${test%%/*}
     local has_stdin=0 expres=0 error=0
     local args regexp res
@@ -15,7 +16,9 @@ run_test() {
     else
         touch ${tmpdir}/infile
     fi
+    export WG_SETUP_HOOK_DIR="${test}"
     export WG_TEST_FILE=${tmpdir}/infile
+    [[ -z "$group" ]] || chgrp $group "$WG_TEST_FILE"
 
     if [[ $has_stdin -eq 1 ]]; then
         ! wg-setup ${command} ${args} <${test}.stdin 1>${tmpdir}/stdout 2>${tmpdir}/stderr
@@ -23,6 +26,13 @@ run_test() {
         ! wg-setup ${command} ${args} 1>${tmpdir}/stdout 2>${tmpdir}/stderr
     fi
     res=${PIPESTATUS[0]}
+    if [[ -n "$group" ]]; then
+        actualGroup="$(stat -c "%G" "$WG_TEST_FILE")"
+        if [[ "$group" != "$actualGroup"  ]]; then
+            echo "Test ${test} failed: Group $actualGroup doesn't match expected group $group!"
+            error=1
+        fi
+    fi
     [[ -f ${test}.result ]] && expres=$(<${test}.result)
     if [[ $res -ne $expres ]]; then
         echo "Test ${test} failed: Exit code $res doesn't match expected exit code $expres!"
@@ -75,6 +85,7 @@ run_test add-peer/interactive-error-pubkey-exists
 run_test add-peer/interactive-error-allowedips-exists
 
 run_test add-peer/args-success
+run_test add-peer/args-success-hooks
 run_test add-peer/args-y-success
 run_test add-peer/args-error-abort
 run_test add-peer/args-error-too-few-arguments
@@ -83,6 +94,8 @@ run_test add-peer/args-error-pubkey-exists
 run_test add-peer/args-error-allowedips-exists
 
 run_test remove-peer/interactive-success
+run_test remove-peer/interactive-success-by-ip
+run_test remove-peer/interactive-success-by-name
 run_test remove-peer/interactive-y-success
 run_test remove-peer/interactive-error-pubkey-not-found
 run_test remove-peer/interactive-error-abort
@@ -91,9 +104,13 @@ run_test remove-peer/interactive-success-noblank
 run_test remove-peer/interactive-success-noblank2
 run_test remove-peer/interactive-success-extra
 
-run_test remove-peer/args-success
+run_test remove-peer/args-success ${1:-users}
+run_test remove-peer/args-success-hooks
+run_test remove-peer/args-success-by-ip
+run_test remove-peer/args-success-by-name
 run_test remove-peer/args-y-success
 run_test remove-peer/args-error-pubkey-not-found
+run_test remove-peer/args-error-multiple
 run_test remove-peer/args-error-abort
 
 run_test list-peers/args-none
