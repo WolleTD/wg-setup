@@ -67,6 +67,13 @@ the `-y` option.
 _TODO: `remove-peer` currently only accepts public keys, which is needlessly complex as both
 the hostname and IP address are unique as well._
 
+`list-peers` provides a convenient way to export the client list into some other format.
+Currently, three formats are supported:
+
+* `hosts`: an `/etc/hosts`-like list of names and IP addresses
+* `pubkeys`: like `hosts` but with the pubkeys in a third column
+* `dns`: BIND zonefile format (only host lines, no header)
+
 ### add-peer example
 
 ```
@@ -95,7 +102,11 @@ Remove this configuration from /etc/systemd/network/90-wireguard.netdev? [y/N]
 
 ### list-peers
 
-_(work in progress)_
+```
+$ wg-setup list-peers pubkeys
+172.16.0.10     my-peer         iCJSinvalidCG2/WP9D1/viGlv+WrNpWtd1XkRzyrFs=
+...
+```
 
 ## Setup clients with `wg-setup-client`
 
