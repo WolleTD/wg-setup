@@ -87,17 +87,16 @@ add_peer() {
 # Inner function for cmd_remove_peer
 remove_peer() {
     local peer="$1"
+    local awkScript='{ l[++n]=$0 }
+        /^(\[(WireGuard)?Peer\])?$/ {
+            if ((f && !r) || (!f && r)) { for (i=1;i<n;i++) { print l[i] } if (n>1) { print "" } }
+            delete l; n=(NF > 0); f=0; l[n]=$0
+        }
+        /^PublicKey/ { if($3==pk){ f=1;fs=1 } }
+        END { exit !fs }'
 
     # Always print portion that is removed to stdout
-    if awk -v pk="${peer}" \
-        '{ l[++n]=$0 }
-        /^\[(WireGuard)?Peer\]$/ { if(f){ for(i=1;i<n;i++){ print l[i] } if(n>1){print ""} }
-            delete l;n=1;f=0;l[n]=$0 }
-        /^PublicKey/ { if($3==pk){ f=1;fs=1 } }
-        /^$/ { if(f){ for(i=1;i<=n;i++){ print l[i] } } delete l;n=0;f=0 }
-        END { exit !fs }' \
-        "${WG_NETDEV}"
-    then
+    if awk -v pk="${peer}" "${awkScript}" "${WG_NETDEV}"; then
         if [[ "${YES}" != "yes" ]]; then
             echo -n "Remove this configuration from ${WG_NETDEV}? [y/N] "
             read -r del
@@ -107,14 +106,7 @@ remove_peer() {
         # Remove from $WG_NETDEV
         tmpfile=$(mktemp "${WG_NETDEV}.XXXXXX")
         read fuid fgid fperms < <(stat -c "%u %g %a" "$WG_NETDEV")
-        awk -v pk="${peer}" \
-            '{ l[++n]=$0 }
-            /^\[(WireGuard)?Peer\]$/ { if(!f){ for(i=1;i<n;i++){ print l[i] } if(n>1){print ""}}
-                delete l;n=1;f=0;l[n]=$0 }
-            /^PublicKey/ { if($3==pk){ f=1;fs=1 } }
-            /^$/ { if(!f){ for(i=1;i<=n;i++){ print l[i] } } delete l;n=0;f=0 }
-            END { exit !fs }' \
-            "${WG_NETDEV}" > "$tmpfile"
+        awk -v pk="${peer}" -v r=1 "${awkScript}" "${WG_NETDEV}" > "$tmpfile"
         chmod "$fperms" "$tmpfile"
         chown "$fuid:$fgid" "$tmpfile"
         mv "$tmpfile" "$WG_NETDEV"
