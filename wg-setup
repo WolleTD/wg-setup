@@ -1,9 +1,4 @@
-#!/bin/bash -e
-# Interactively add a new peer to a WireGuard configuration
-# This script is build for systemd-networkd's netdev-files,
-# but should be easily convertible for wg-quick
-#   created by Eicke Herbertz, 2020
-#
+#!/bin/bash
 # Interactively remove a peer from a WireGuard configuration
 # This script is build for systemd-networkd's netdev-files,
 # but should be easily convertible for wg-quick
@@ -12,10 +7,13 @@
 # This will test the target .netdev file for existing values. For "Name" as first
 # argument, the line "^# $2\$" is matched, otherwise "^$1 = $2\$" is matched.
 # For exammple "test_exists AllowedIPs 127.0.0.1" matches "^AllowedIPs = 127.0.0.1$"
+
+set -eu
+
 test_exists() {
     key="$1 = "
     [[ "$1" == "Name" ]] && key="# "
-    if grep -q "^${key}$2\$" "${WG_NETDEV}"; then
+    if grep -q "^${key}$2\$" "${WG_CONFFILE}"; then
         echo "A peer with this $1 already exists!"
         return 2
     fi
@@ -62,25 +60,27 @@ add_peer() {
     test_publickey "${peer}" 1>&2 || return $?
     test_allowedips "${allowed_ips}" 1>&2 || return $?
 
-    CONFIG="[${IS_NETDEV:+WireGuard}Peer]\n"
-    CONFIG+="# ${name}\n"
-    CONFIG+="# Added by ${SUDO_USER:-$(id -un)} at $(date +%F)\n"
-    CONFIG+="PublicKey = ${peer}\n"
-    CONFIG+="AllowedIPs = ${allowed_ips}\n"
+    local config
+    config="[${IS_NETDEV:+WireGuard}Peer]\n"
+    config+="# ${name}\n"
+    config+="# Added by ${SUDO_USER:-$(id -un)} at $(date +%F)\n"
+    config+="PublicKey = ${peer}\n"
+    config+="AllowedIPs = ${allowed_ips}\n"
 
-    echo -e "${CONFIG}"
+    echo -e "${config}"
 
-    if [[ "${YES}" != "yes" ]]; then
-        echo -n "Add this configuration to ${WG_NETDEV}? [Y/n] "
+    if [[ -z "${NO_CONFIRM}" ]]; then
+        echo -n "Add this configuration to ${WG_CONFFILE}? [Y/n] "
+        local add
         read -r add
-        [[ -z "${add}" || "${add}" == "y" || "${add}" == "Y" ]] || return 1
+        [[ -z "${add}" || "${add,}" == "y" ]] || return 1
     fi
 
-    echo -e "${CONFIG}" >> "${WG_NETDEV}"
+    echo -e "${config}" >> "${WG_CONFFILE}"
 
     # Check if interface is non-zero and actually existing
-    if [[ -z ${WG_TEST} && -e /sys/class/net/${WG_IFACE} ]]; then
-        wg set "${WG_IFACE}" peer "${peer}" allowed-ips "${allowed_ips}"
+    if [[ -z ${WG_TEST} && -e /sys/class/net/${WG_IFNAME} ]]; then
+        wg set "${WG_IFNAME}" peer "${peer}" allowed-ips "${allowed_ips}"
     fi
     run_hooks added "$name" "$peer" "$allowed_ips"
 }
@@ -99,27 +99,33 @@ remove_peer() {
         END { if(m){ exit 2 }else{ exit !fs } }'
 
     # Always print portion that is removed to stdout
-    if awk -v pk="${peer}" "${awkScript}" "${WG_NETDEV}"; then
-        if [[ "${YES}" != "yes" ]]; then
-            echo -n "Remove this configuration from ${WG_NETDEV}? [y/N] "
+    if awk -v pk="${peer}" "${awkScript}" "${WG_CONFFILE}"; then
+        if [[ -z "${NO_CONFIRM}" ]]; then
+            echo -n "Remove this configuration from ${WG_CONFFILE}? [y/N] "
+            local del
             read -r del
-            [[ "${del}" == "y" || "${del}" == "Y" ]] || return 1
+            [[ "${del,}" == "y" ]] || return 1
         fi
 
         # Rerun the awk script to extract the peer data, we expect it to be a fine result now
-        read name pubkey ips < <(awk -v pk="${peer}" "${awkScript}" "${WG_NETDEV}" |
+        local name pubkey ips
+        read name pubkey ips < <(awk -v pk="${peer}" "${awkScript}" "${WG_CONFFILE}" |
             awk '/^# /&&!n{n=$2}/^PublicKey/{k=$3}/^AllowedIPs/{i=$3}END{print n,k,i}')
 
-        # Remove from $WG_NETDEV
-        tmpfile=$(mktemp "${WG_NETDEV}.XXXXXX")
-        read fuid fgid fperms < <(stat -c "%u %g %a" "$WG_NETDEV")
-        awk -v pk="${peer}" -v r=1 "${awkScript}" "${WG_NETDEV}" > "$tmpfile"
+        # Remove the entry from WG_CONFFILE and write the result to a temporary file
+        local tmpfile
+        tmpfile=$(mktemp "${WG_CONFFILE}.XXXXXX")
+        awk -v pk="${peer}" -v r=1 "${awkScript}" "${WG_CONFFILE}" > "$tmpfile"
+
+        # Copy ownership and permissions to the new file and then replace the original with it
+        local fuid fgid perms
+        read fuid fgid fperms < <(stat -c "%u %g %a" "$WG_CONFFILE")
         chmod "$fperms" "$tmpfile"
         chown "$fuid:$fgid" "$tmpfile"
-        mv "$tmpfile" "$WG_NETDEV"
+        mv "$tmpfile" "$WG_CONFFILE"
 
-        # Check if interface is non-zero and actually existing
-        if [[ -z ${WG_TEST} && -e /sys/class/net/${WG_IFACE} ]]; then
+        # Remove peer from interface if the interface actually is present
+        if [[ -z ${WG_TEST} && -e /sys/class/net/${WG_IFNAME} ]]; then
             wg set "${WG_IFNAME}" peer "${pubkey}" remove
         fi
         run_hooks removed "$name" "$pubkey" "$ips"
@@ -134,6 +140,7 @@ remove_peer() {
 
 run_hooks() {
     [[ -d "${WG_SETUP_HOOK_DIR}" ]] || return 0
+    local file
     for file in ${WG_SETUP_HOOK_DIR}/*; do
         [[ -x "${file}" ]] && "${file}" "$@"
     done
@@ -141,8 +148,9 @@ run_hooks() {
 
 usage() {
     cat <<EOF
-Usage: wg-setup [-y] [-f <file>] <command> [args...]
-    -f <file>   systemd .netdev file to edit
+Usage: wg-setup [-y] [-f <file>|-i <ifname>] <command> [args...]
+    -f <file>   systemd .netdev file to edit (incompatible with -i)
+    -i <ifname> WireGuard interface to edit (incompatible with -f)
     -y          no confirmation required
 
 Commands:
@@ -161,24 +169,25 @@ EOF
 }
 
 cmd_add_peer() {
-    if [[ $# -gt 3 ]]; then
-        echo "Error: Too many arguments!" >&2
+    if [[ $# -ne 0 && $# -ne 3 ]]; then
+        echo "Error: Expected 0 or 3 arguments, got $#!" >&2
         usage 1
-    elif [[ $# -gt 0 && $# -lt 3 ]]; then
-        echo "Error: Too few arguments!" >&2
-        usage 1
+
     elif [[ $UID -ne 0 && ! ${WG_TEST} ]]; then
         echo "Error: Must be root to add new peers!" >&2
         return 1
-    fi
-    NAME=$1
-    PEER=$2
-    ALLOWED_IPS=$3
 
-    if [[ -z "${PEER}" ]]; then
-        echo "Add WireGuard peer(s) to ${WG_NETDEV}"
+    elif [[ $# -eq 3 ]]; then
+        local name=$1
+        local pubkey=$2
+        local allowed_ips=$3
+        add_peer "${name}" "${pubkey}" "${allowed_ips}"
 
-        cont="y"
+    else
+        echo "Add WireGuard peer(s) to ${WG_CONFFILE}"
+
+        local cont="y"
+        local name pubkey allowedips
         while [[ "${cont}" == "y" || "${cont}" == "Y" ]]; do
             echo -n "Name: "
             read -r name
@@ -197,27 +206,27 @@ cmd_add_peer() {
             echo -n "Add another peer? [y/N] "
             read -r cont
         done
-    else
-        add_peer "${NAME}" "${PEER}" "${ALLOWED_IPS}"
     fi
-
 }
 
 cmd_remove_peer() {
     if [[ $# -gt 1 ]]; then
-        echo "Error: Too many arguments!" >&2
+        echo "Error: Expected 0 or 1 arguments, got $#!" >&2
         usage 1
+
     elif [[ $UID -ne 0 && ! ${WG_TEST} ]]; then
         echo "Error: Must be root to remove peers!" >&2
         return 1
-    fi
-    PEER=$1
 
-    # go interactive if no peer provided
-    if [[ -z "${PEER}" ]]; then
-        echo "Remove WireGuard peer(s) from ${WG_NETDEV}"
+    elif [[ $# -eq 1 ]]; then
+        local peer=$1
+        remove_peer "${peer}"
 
-        cont="y"
+    else
+        echo "Remove WireGuard peer(s) from ${WG_CONFFILE}"
+
+        local cont="y"
+        local peer
         while [[ "${cont}" == "y" || "${cont}" == "Y" ]]; do
             echo -n "Enter PublicKey/Hostname/IPAddress: "
             read -r peer
@@ -225,8 +234,6 @@ cmd_remove_peer() {
             echo -n "Remove another peer? [y/N] "
             read -r cont
         done
-    else
-        remove_peer "${PEER}"
     fi
 }
 
@@ -236,61 +243,129 @@ cmd_list_peers() {
         echo "Error: Too many arguments!" >&2
         usage 1
     fi
-    FORMAT=${1:-hosts}
-    case "${FORMAT}" in
+
+    local format=${1:-hosts}
+
+    case "${format}" in
     hosts)
         awk '/^\[(WireGuard)?Peer\]$/{getline;if($1=="#"&&$2!="Added"){name=$2}else{name="<none>"}}
         /^AllowedIPs/{sub(/\/[0-9]+/,"",$3);printf("%-19s %s\n",$3,name)}' \
-            ${WG_NETDEV}
+            ${WG_CONFFILE}
         ;;
     added)
         awk '/^\[(WireGuard)?Peer\]$/{getline;if($1=="#"){
             if($2!="Added"){name=$2;getline;if($1=="#"&&$2=="Added"){comment=$0}}
             else{name="<none>";comment=$0}}}
         /^AllowedIPs/{sub(/\/[0-9]+/,"",$3);printf("%-19s %-30s %s\n",$3,name,comment)}' \
-            ${WG_NETDEV}
+            ${WG_CONFFILE}
         ;;
     pubkeys)
         awk '/^\[(WireGuard)?Peer\]$/{getline;if($1=="#"&&$2!="Added"){name=$2}else{name="<none>"}}
         /^PublicKey/{pubkey=$3}/^AllowedIPs/{sub(/\/[0-9]+/,"",$3);ip=$3}
         name&&pubkey&&ip{printf("%-19s %-30s %s\n",ip,name,pubkey);name=pubkey=ip=""}' \
-            ${WG_NETDEV}
+            ${WG_CONFFILE}
         ;;
     dns-zone)
         awk '/^\[(WireGuard)?Peer\]$/{getline;if($1=="#"&&$2!="Added"){name=$2}else{name="<none>"}}
         /^AllowedIPs/{sub(/\/[0-9]+/,"",$3);printf("%-24s IN   A    %s\n",name,$3)}' \
-            ${WG_NETDEV}
+            ${WG_CONFFILE}
         ;;
     *)
         echo "Available formats: $LIST_FORMATS"
-        [[ "${FORMAT}" == "help" ]] || { echo "Error: Unknown format ${FORMAT}!"; return 1; }
+        [[ "${format}" == "help" ]] || { echo "Error: Unknown format ${format}!"; return 1; }
         ;;
     esac
 }
 
+ifname_from_conffile() {
+    local conffile="$1"
+    if [[ ! -f "${conffile}" ]]; then
+        echo "Error: ${conffile} not found!" >&2
+        exit 1
+    fi
+
+    local ext basename ifname
+
+    local ext="${conffile##*.}"
+
+    if [[ "${ext}" == "conf" ]]; then
+        # wg-quick uses <ifname>.conf as filename
+        local basename="${conffile##*/}"
+        ifname="${basename%.*}"
+    elif [[ "${ext}" == "netdev" ]]; then
+        # networkd has a Name field in the netdev file
+        ifname=$(awk '/^Name/{gsub(/Name ?= ?/,"",$0);print}' "${conffile}")
+    fi
+
+    if [[ -z "${ifname}" && -z "${WG_TEST}" ]]; then
+        echo "Error: Could not find interface from file ${conffile}!" >&2
+        exit 1
+    fi
+
+    echo "${ifname}"
+}
+
+conffile_from_ifname() {
+    local ifname=$1
+
+    if [[ -n "${WG_TEST_FILE:-}" ]]; then
+        # The cheap way: we are testing and the file is provided in WG_TEST_FILE
+        echo "${WG_TEST_FILE}"
+
+    else
+        # wg-quick files are named after the interface they are for
+        local wg_quick_file="/etc/wireguard/${ifname}.conf"
+
+        # systemd-networkd files contain the interface name, so we grep and hope for a single result.
+        local networkd_file="$(grep -lR "${ifname}" /etc/systemd/network/*.netdev 2>/dev/null || true)"
+
+        if [[ -f "${wg_quick_file}" && -f "${networkd_file}" ]]; then
+            # If both files exist, we check if systemd-networkd is enabled. In that case, we have
+            # to assume that it's also responsible for the interface it has a configuration file for.
+            # If it's not enabled, we assume we are using wg-quick.
+            systemctl is-enabled systemd-networkd && echo "${networkd_file}" || echo "${wg_quick_file}"
+
+        elif [[ -f "${wg_quick_file}" ]]; then
+            echo "${wg_quick_file}"
+
+        elif [[ -f "${networkd_file}" ]]; then
+            echo "${networkd_file}"
+
+        else
+            echo "Could not find backing config file for ${ifname}! Do you have permissions to read it?" >&2
+            exit 1
+        fi
+    fi
+}
+
+WG_SETUP_HOOK_DIR="${WG_SETUP_HOOK_DIR:-/etc/wg-setup}"
+
 # use enhanced getopt
 OPTS=f:hi:y
-LOPTS=file:,help,iface:,noconfirm
+LOPTS=file:,help,ifname:,noconfirm
 PARSED_OPTS=$(getopt -o $OPTS -l $LOPTS -n "$0" -- "$@")
 eval set -- "$PARSED_OPTS"
 
-WG_SETUP_HOOK_DIR="${WG_SETUP_HOOK_DIR:-/etc/wg-setup}"
+WG_CONFFILE=
+WG_IFNAME=
+NO_CONFIRM=
+WG_TEST=${WG_TEST:-}
 
 while [[ "$1" != "--" ]]; do
     case $1 in
     -f|--file)
-        WG_NETDEV="$2"
+        WG_CONFFILE="$2"
         shift 2
         ;;
     -h|--help)
         usage
         ;;
-    -i|--iface)
-        WG_IFACE="$2"
+    -i|--ifname)
+        WG_IFNAME="$2"
         shift 2
         ;;
     -y|--noconfirm)
-        YES=yes
+        NO_CONFIRM=yes
         shift
         ;;
     *)
@@ -301,57 +376,30 @@ while [[ "$1" != "--" ]]; do
 done
 shift # away the --
 
+IS_NETDEV=
+
 # With an interface, wg-setup will automatically find the target
 # configuration file and won't accept any -f argument
-if [[ -n "${WG_IFACE}" && -n "${WG_NETDEV}" ]]; then
+if [[ -n "${WG_IFNAME}" && -n "${WG_CONFFILE}" ]]; then
     echo "Error: Can't use -i and -f together!" >&2
     exit 1
-fi
 
-# If an existing file is provided, use it and determine interface name
-if [[ -n "${WG_NETDEV}" ]]; then
-    if [[ ! -f "${WG_NETDEV}" ]]; then
-        echo "Error: ${WG_NETDEV} not found!" >&2
-        exit 1
-    fi
-    basename="${WG_NETDEV##*/}"
-    # wg-quick uses <iface>.conf as filename exclusively
-    [[ "${WG_NETDEV##*.}" == ".conf" ]] && WG_IFACE="${basename%.*}"
-    # If that didn't work, it's a .netdev file
-    [[ -z "${WG_IFACE}" ]] && WG_IFACE=$(awk '/^Name/{gsub(/Name ?= ?/,"",$0);print}')
-    # If that didn't work either, configuration is broken or we are in testing
-    if [[ -z "${WG_IFACE}" && -z "${WG_TEST}" ]]; then
-        echo "Error: Could not find interface from given configuration file!"
-        exit 1
-    fi
-    WG_IFACE=${WG_IFACE:-wg0}
-    echo "Using interface name ${WG_IFACE}"
+elif [[ -n "${WG_CONFFILE}" ]]; then
+    # If an existing file is provided, use it and determine interface name
+    WG_IFNAME=$(ifname_from_conffile "${WG_CONFFILE}")
+    echo "Using interface name ${WG_IFNAME}"
+
 else
-    # No configuration file is provided, try to figure it out
-    WG_IFACE=${WG_IFACE:-wg0}
-    if [[ -z "${WG_TEST_FILE}" ]]; then
-        WG_QUICK="/etc/wireguard/${WG_IFACE}.conf"
-        WG_NETDEV=$(grep -lR "${WG_IFACE}" /etc/systemd/network/*.netdev 2>/dev/null || true)
-        if [[ -f "${WG_QUICK}" && -f "${WG_NETDEV}" ]]; then
-            # Only check if systemd-networkd is enabled, as wg-quick will run without any
-            # service unit in a container
-            systemctl is-enabled systemd-networkd || WG_NETDEV="${WG_QUICK}"
-        elif [[ -f "${WG_QUICK}" ]]; then
-            WG_NETDEV="${WG_QUICK}"
-        elif [[ ! -f "${WG_NETDEV}" ]]; then
-            echo "Could not find backing config file for ${WG_IFACE}!" >&2
-            exit 1
-        fi
-    else
-        WG_NETDEV="${WG_TEST_FILE}"
-    fi
-    [[ "${WG_QUICK}" == "${WG_NETDEV}" ]] || IS_NETDEV=yes
-    #echo "Using configuration file ${WG_NETDEV}"
+    # No configuration file is provided, try to figure it out.
+    # Use wg0 if no interface name is provided, either.
+    WG_IFNAME=${WG_IFNAME:-wg0}
+
+    WG_CONFFILE="$(conffile_from_ifname "${WG_IFNAME}")"
 fi
 
-# $1 is command
+[[ "${WG_CONFFILE##*.}" == "netdev" ]] && IS_NETDEV=yes
+
 cmd="$1"; shift || usage 1
-# $1 is name, $2 is peer, $3 is allowed-ips
 
 case "${cmd}" in
     add-peer|a*)
@@ -367,8 +415,8 @@ case "${cmd}" in
         usage 0
         ;;
     *)
-        echo "Unknown command ${cmd}!"
-        exit 127
+        echo "Unknown command ${cmd}!" >&2
+        usage 1
         ;;
 esac
 
