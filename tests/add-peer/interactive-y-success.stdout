@@ -1,4 +1,4 @@
-Add WireGuard peer\(s\) to /tmp/tmp\.[[:alnum:]]+/infile
+Add WireGuard peer\(s\) to /etc/systemd/network/90-wireguard.netdev
 Name: PublicKey: AllowedIPs: 
 \[WireGuardPeer\]
 # peer2

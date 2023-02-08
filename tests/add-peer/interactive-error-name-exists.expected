@@ -1,4 +1,6 @@
-\[WireGuardPeer\]
+# wg0
+
+\[Peer\]
 # peer1
 # Added by wolle at 2020-03-01
 PublicKey = aWosQEdndReq6diLeGq2BKKl0fFGA7v/3Qbwu9pbYxg=

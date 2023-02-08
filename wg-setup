@@ -173,7 +173,7 @@ cmd_add_peer() {
         echo "Error: Expected 0 or 3 arguments, got $#!" >&2
         usage 1
 
-    elif [[ $UID -ne 0 && ! ${WG_TEST} ]]; then
+    elif [[ $UID -ne 0 ]]; then
         echo "Error: Must be root to add new peers!" >&2
         return 1
 
@@ -214,7 +214,7 @@ cmd_remove_peer() {
         echo "Error: Expected 0 or 1 arguments, got $#!" >&2
         usage 1
 
-    elif [[ $UID -ne 0 && ! ${WG_TEST} ]]; then
+    elif [[ $UID -ne 0 ]]; then
         echo "Error: Must be root to remove peers!" >&2
         return 1
 
@@ -297,7 +297,7 @@ ifname_from_conffile() {
         ifname=$(awk '/^Name/{gsub(/Name ?= ?/,"",$0);print}' "${conffile}")
     fi
 
-    if [[ -z "${ifname}" && -z "${WG_TEST}" ]]; then
+    if [[ -z "${ifname}" ]]; then
         echo "Error: Could not find interface from file ${conffile}!" >&2
         exit 1
     fi
@@ -308,33 +308,27 @@ ifname_from_conffile() {
 conffile_from_ifname() {
     local ifname=$1
 
-    if [[ -n "${WG_TEST_FILE:-}" ]]; then
-        # The cheap way: we are testing and the file is provided in WG_TEST_FILE
-        echo "${WG_TEST_FILE}"
+    # wg-quick files are named after the interface they are for
+    local wg_quick_file="/etc/wireguard/${ifname}.conf"
+
+    # systemd-networkd files contain the interface name, so we grep and hope for a single result.
+    local networkd_file="$(grep -lR "${ifname}" /etc/systemd/network/*.netdev 2>/dev/null || true)"
+
+    if [[ -f "${wg_quick_file}" && -f "${networkd_file}" ]]; then
+        # If both files exist, we check if systemd-networkd is enabled. In that case, we have
+        # to assume that it's also responsible for the interface it has a configuration file for.
+        # If it's not enabled, we assume we are using wg-quick.
+        systemctl is-enabled systemd-networkd >/dev/null && echo "${networkd_file}" || echo "${wg_quick_file}"
+
+    elif [[ -f "${wg_quick_file}" ]]; then
+        echo "${wg_quick_file}"
+
+    elif [[ -f "${networkd_file}" ]]; then
+        echo "${networkd_file}"
 
     else
-        # wg-quick files are named after the interface they are for
-        local wg_quick_file="/etc/wireguard/${ifname}.conf"
-
-        # systemd-networkd files contain the interface name, so we grep and hope for a single result.
-        local networkd_file="$(grep -lR "${ifname}" /etc/systemd/network/*.netdev 2>/dev/null || true)"
-
-        if [[ -f "${wg_quick_file}" && -f "${networkd_file}" ]]; then
-            # If both files exist, we check if systemd-networkd is enabled. In that case, we have
-            # to assume that it's also responsible for the interface it has a configuration file for.
-            # If it's not enabled, we assume we are using wg-quick.
-            systemctl is-enabled systemd-networkd && echo "${networkd_file}" || echo "${wg_quick_file}"
-
-        elif [[ -f "${wg_quick_file}" ]]; then
-            echo "${wg_quick_file}"
-
-        elif [[ -f "${networkd_file}" ]]; then
-            echo "${networkd_file}"
-
-        else
-            echo "Could not find backing config file for ${ifname}! Do you have permissions to read it?" >&2
-            exit 1
-        fi
+        echo "Could not find backing config file for ${ifname}! Do you have permissions to read it?" >&2
+        exit 1
     fi
 }
 
