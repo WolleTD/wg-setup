@@ -49,5 +49,8 @@ docker exec wg-client ping -c 1 172.16.20.1
 docker exec wg-client ping -c 2 172.16.20.1
 docker exec wg-server ping -c 2 172.16.20.2
 
+echo "Removing peer..."
+docker exec wg-server wg-setup remove-peer -y 172.16.20.2
+
 echo "Success!"
 rm -rf ${shared}

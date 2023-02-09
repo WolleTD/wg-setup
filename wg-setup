@@ -118,13 +118,9 @@ remove_peer() {
         chown "$fuid:$fgid" "$tmpfile"
         mv "$tmpfile" "$WG_NETDEV"
 
-        # Find interface in $WG_NETDEV
-        local interface
-        interface=$(awk '/Name = /{print $3}' "${WG_NETDEV}")
-
         # Check if interface is non-zero and actually existing
-        if [[ ${interface} && -e /sys/class/net/${interface} ]]; then
-            wg set "${interface}" peer "${peer}" remove
+        if [[ -z ${WG_TEST} && -e /sys/class/net/${WG_IFACE} ]]; then
+            wg set "${WG_IFNAME}" peer "${pubkey}" remove
         fi
         run_hooks removed "$name" "$pubkey" "$ips"
         return 0
