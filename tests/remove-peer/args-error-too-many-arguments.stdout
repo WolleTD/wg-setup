@@ -1,0 +1,15 @@
+Usage: wg-setup \[-y\] \[-f <file>\] <command> \[args\.\.\.\]
+    -f <file>   systemd .netdev file to edit
+    -y          no confirmation required
+
+Commands:
+    Without arguments, all commands except for list-\* run interactively.
+
+    add-peer <name> <public-key> <allowed-ips>
+        Add the provided configuration to WireGuard interface
+    remove-peer <public-key|name|ip-address>
+        Remove a peer from the WireGuard interface
+    list-peers \[format\]
+        List all valid wg-setup peers \(those with a hostname\) known to WireGuard\.
+        By default, a hosts-like list of addresses and hostnames is generated\.
+        Available formats are: hosts, added, pubkeys, dns-zone

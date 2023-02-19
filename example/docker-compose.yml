@@ -1,0 +1,66 @@
+version: '3'
+
+# wg-server is the WireGuard server. We don't have to map any ports in this example
+# as it's only communicating with other containers within it's network. A "real"
+# server with clients in the real world would have to be exposed somehow.
+#
+# wg-client is a WireGuard client that will be connected to the server. It also
+# servers as a VPN gateway to the nginx container, but still doesn't need to
+# map or expose any ports as the WireGuard connection terminates inside the network
+# stack of the container itself.
+#
+# nginx is an example webserver that is provided to the WireGuard VPN through
+# the wg-client container by using network_mode "container". Unfortunately, this
+# mode seems to be undocumented. It works just like host-mode, but shares it's
+# network stack with another container, wg-client in this case.
+# So, as long as the service should only be provided in the VPN, we still don't
+# have to expose any ports or do any network configuration at all. It just works.
+#
+# As the keys for this example are generated locally, the server must be started
+# before the client and keys must be exchanged. The `up.sh` script takes care of
+# all this and runs a demonstrative `wget` on the server, downloading the default
+# page from nginx behind the client.
+
+services:
+  wg-server:
+    image: wolletd/wg-setup:latest
+    restart: unless-stopped
+    # The wg-setup container requires CAP_NET_ADMIN to modify it's WireGuard interface
+    cap_add:
+      - NET_ADMIN
+    # Disabled for demonstration purposes
+    # volumes:
+    #   - wg-server:/etc/wireguard
+    env_file:
+      - wg-server.env
+
+  wg-client:
+    image: wolletd/wg-setup:latest
+    restart: unless-stopped
+    # optional, used for the network mode below (if not set, it would be example_wg-client_1,
+    # which would also do, but is dependent on the directory name)
+    container_name: wireguard-gateway
+    # The wg-setup container requires CAP_NET_ADMIN to modify it's WireGuard interface
+    cap_add:
+      - NET_ADMIN
+    # Disabled for demonstration purposes
+    # volumes:
+    #   - wg-client:/etc/wireguard
+    env_file:
+      - wg-client.env
+      # The split is only useful in this example, where the key is unknown
+      - wg-pubkey.env
+
+  nginx:
+    image: nginx:latest
+    restart: unless-stopped
+    # map the network stack of this container into wireguard-gateway
+    network_mode: "container:wireguard-gateway"
+    # we need a depends_on because wg-client has to run for the network_mode to work
+    depends_on:
+      - wg-client
+
+# Disabled for demonstration purposes
+# volumes:
+#   wg-server:
+#   wg-client:

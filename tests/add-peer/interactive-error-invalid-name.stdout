@@ -1,4 +1,4 @@
-Add WireGuard peer\(s\) to /tmp/tmp\.[[:alnum:]]+/infile
+Add WireGuard peer\(s\) to /etc/systemd/network/90-wireguard.netdev
 Name: Error: Not a valid hostname!
 Name: PublicKey: AllowedIPs: 
 \[WireGuardPeer\]
@@ -7,4 +7,4 @@ Name: PublicKey: AllowedIPs:
 PublicKey = iCJSbobpCRHCG2/WP9D1/viGlv\+WrNpWtd1XkRzyrFs=
 AllowedIPs = 172\.16\.1\.2/32
 
-Add this configuration to /tmp/tmp\..+/infile\? \[Y/n\] Add another peer\? \[y/N\] 
+Add this configuration to /etc/systemd/network/90-wireguard.netdev\? \[Y/n\] Add another peer\? \[y/N\] 

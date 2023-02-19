@@ -1,3 +1,6 @@
+\[NetDev\]
+Name = wg0
+
 \[WireGuardPeer\]
 # peer1
 # Added by wolle at 2020-03-01

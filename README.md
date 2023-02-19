@@ -1,30 +1,67 @@
 # wg-setup WireGuard Management
 
-I designed `wg-setup` to simplify the setup of WireGuard when handling large amounts of
-clients. The server-side tool was initially built for use with systemd-networkd, but I
-added wg-quick support to be able to test it in containers.
+Trivial CLI tool to simplify WireGuard interface management.
 
-The `wg-setup-client` tool will use systemd-networkd as well to configure WireGuard, if
-the service is enabled. Otherwise, it will fall back to wg-quick (but still enable a systemd
-service for that, if systemd is available). Despite it's name, it's also capable of setting
-up servers, as a WireGuard server is just a peer with a fixed listening port.
+Highlights:
+* add and remove peers while keeping files and running interface configuration in sync
+* list peers in condensed formats
+* purely implemented in bash (which already is a dependency of `wg-quick`)
+* works seamlessly with both `wg-quick` and `systemd-networkd` as interface backend
+* adds a concept of "hostnames" to WireGuard peers that can also be used to remove peers
+* uses existing configuration files, no additional services (hostnames are stored as simple comments)
+* basic hook support for e.g. automatically updating a DNS zone
 
-## Quick example
+The `wg-setup-client` tool is used to setup WireGuard client (and server) interfaces.
+It will use `systemd-networkd` if enabled, otherwise fallback to `wg-quick`.
 
-Set up a VPN connection with eight commands (of which three are signature checking)!
+## Examples
 
-Server:
+```
+# Add a peer
+$ wg-setup add-peer my-peer DX/sYzuD9AYsKegfLpklFboYAWLyxKoe7CU00g9iSzc= 172.16.10.2
+[Peer]
+# my-peer
+# Added by root at 2020-05-20
+PublicKey = DX/sYzuD9AYsKegfLpklFboYAWLyxKoe7CU00g9iSzc=
+AllowedIPs = 172.16.10.2/32
+
+Add this configuration to /etc/wireguard/wg0.conf? [Y/n]
+$
+
+# Remove a peer (using hostname, IP address or public key)
+$ wg-setup remove-peer 172.16.10.2
+[Peer]
+# my-peer
+# Added by root at 2020-05-20
+PublicKey = DX/sYzuD9AYsKegfLpklFboYAWLyxKoe7CU00g9iSzc=
+AllowedIPs = 172.16.10.2/32
+
+Remove this configuration from /etc/wireguard/wg0.conf? [y/N]
+$
+
+# List registered peers
+$ wg-setup list-peers pubkeys
+172.16.10.2     my-peer         DX/sYzuD9AYsKegfLpklFboYAWLyxKoe7CU00g9iSzc=
+$
+```
+
+## Installation
+
+### Docker
+See the [example](example) directory for how to use docker-compose to set up server and client.
+
+### Server
 ```
 $ git clone https://github.com/WolleTD/wg-setup.git && cd wg-setup
 
-# To install only wg-setup scripts and services
+# To install wg-setup scripts and services
 $ sudo ./install.sh
 
 # To also configure a WireGuard server interface
-$ sudo ./install.sh wireguard
+$ sudo ./wg-setup-client --server [SERVER_IP] [LISTENING_PORT]
 ```
 
-Client:
+### Client
 ```
 $ gpg --recv-keys FB9DA662
 $ curl -O https://raw.githubusercontent.com/WolleTD/wg-setup/$ref/wg-setup-client
@@ -41,7 +78,7 @@ wg-setup add-peer my_hostname my_publickey 172.16.1.10
 
 Paste the last line printed by `wg-setup-client` in a terminal on the server and you're done.
 
-## Manage peers with `wg-setup`
+## Motivation
 
 A WireGuard interface and thus a WireGuard server is usually configured in a file only editable
 by root, also the running interface has to be restarted or configured separately to the file for
@@ -54,15 +91,13 @@ an input validation layer for the file content.
 While `wg-quick` supports an additional `SaveConfig` parameter, this only exports the running
 interface configuration upon wg-quick shutdown, carrying the risk of losing new peer configuration
 if the service or machine terminates abnormally.
-Also, it simply doesn't work with `systemd-networkd`.
+Also, it simply doesn't work with `systemd-networkd` and that's what I wanted to use for my
+WireGuard interfaces.
 
-The `add-peer` command expects a hostname in addition to public key and IP address. This hostname
-is stored in the configuration file as a comment, has to be unique and can be read by the
-`list-peers` and `remove-peer` commands.
-If the IP address is supplied without mask suffix, it will be defaulted to /32.
+The next pain point of plain WireGuard is that there are no human-readable names assigned to peers.
+So from the beginning, my tools added a comment line with a supplied hostname for each peer.
+It's not tagged, it's just the first comment line in a `[Peer]` section.
 
-Both commands are interactive if no arguments are provided and confirmation can be skipped with
-the `-y` option.
 
 `list-peers` provides a convenient way to export the client list into some other format.
 Currently, three formats are supported:
@@ -78,40 +113,6 @@ Currently, three formats are supported:
 `added|removed <name> <public key> <allowed ips>`. This can be used to e.g. update
 a condensed list of hosts or a DNS zone. The example hooks don't even use the
 provided arguments, but simply call `list-peers` to get a full list each time.
-
-### add-peer example
-
-```
-$ wg-setup add-peer my-peer iCJSinvalidCG2/WP9D1/viGlv+WrNpWtd1XkRzyrFs= 172.16.0.10
-[WireGuardPeer]
-# my-peer
-# Added by wolle at 2020-05-20
-PublicKey = iCJSinvalidCG2/WP9D1/viGlv+WrNpWtd1XkRzyrFs=
-AllowedIPs = 172.16.0.10/32
-
-Add this configuration to /etc/systemd/network/90-wireguard.netdev? [Y/n]
-```
-
-### remove-peer example
-
-```
-$ wg-setup remove-peer 172.16.0.10
-[WireGuardPeer]
-# my-peer
-# Added by wolle at 2020-05-20
-PublicKey = iCJSinvalidCG2/WP9D1/viGlv+WrNpWtd1XkRzyrFs=
-AllowedIPs = 172.16.0.10/32
-
-Remove this configuration from /etc/systemd/network/90-wireguard.netdev? [y/N]
-```
-
-### list-peers
-
-```
-$ wg-setup list-peers pubkeys
-172.16.0.10     my-peer         iCJSinvalidCG2/WP9D1/viGlv+WrNpWtd1XkRzyrFs=
-...
-```
 
 ## Setup clients with `wg-setup-client`
 

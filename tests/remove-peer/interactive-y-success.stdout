@@ -1,4 +1,4 @@
-Remove WireGuard peer\(s\) from /tmp/tmp\.[[:alnum:]]+/infile
+Remove WireGuard peer\(s\) from /etc/systemd/network/90-wireguard.netdev
 Enter PublicKey/Hostname/IPAddress: \[WireGuardPeer\]
 # peer2
 # Added by wolle at 2020-03-01

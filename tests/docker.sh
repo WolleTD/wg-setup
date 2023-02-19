@@ -1,47 +1,56 @@
 #!/bin/bash
 set -e
 
-docker build -t wg-setup:latest ..
-shared=$(mktemp -d)
-echo "Setting up WireGuard server..."
-docker run -d --name wg-server --rm --cap-add NET_ADMIN -v ${shared}:/var/lib/wg-setup \
-    wg-setup:latest bash -c "
-    set -xe
-    umask 000
-    /root/wg-setup/install.sh wireguard 172.16.20.1/24 12345
-    wg | awk '/public key/{print \$3}' > /var/lib/wg-setup/pubkey
-    nc -l 172.16.20.1 9999 > /var/lib/wg-setup/nc-out" >/dev/null
+DOCKERIMAGE="wolletd/wg-setup:latest"
 
-while [[ ! -f ${shared}/pubkey ]]; do
+docker build -t "$DOCKERIMAGE" ..
+
+# Create a new network for the test to have DNS resolving
+docker network create wg-test >/dev/null
+
+trap "docker stop wg-server wg-client >/dev/null 2>&1; docker network rm wg-test >/dev/null" EXIT
+
+echo "Setting up WireGuard server..."
+docker run -d \
+    --name wg-server \
+    --network wg-test \
+    --rm \
+    --cap-add NET_ADMIN \
+    -e WG_ADDR="172.16.20.1/24" \
+    -e WG_LISTEN_PORT=12345 \
+    "$DOCKERIMAGE" >/dev/null
+
+while ! docker logs wg-server 2>/dev/null | grep "PublicKey:"; do
     sleep 0.1
 done
-
-trap "docker kill wg-server wg-client >/dev/null 2>&1" ERR
+SERVER_KEY="$(docker logs wg-server | awk '/PublicKey:/{print $2}')"
 
 echo "Setting up client..."
-docker run -d --name wg-client --rm -v ${shared}:/var/lib/wg-setup --cap-add NET_ADMIN \
-    wg-setup:latest bash -c "
-    set -xe
-    umask 000
-    /root/wg-setup/wg-setup-client -p $(<${shared}/pubkey) \
-        -e 172.17.0.2:12345 172.16.20.2/24 | tail -1 > /var/lib/wg-setup/client-setup
-    touch /var/lib/wg-setup/client-done
-    nc -l 127.0.0.1 9998" >/dev/null
+docker run -d \
+    --name wg-client \
+    --network wg-test \
+    --rm \
+    --cap-add NET_ADMIN \
+    -e WG_ADDR="172.16.20.2/24" \
+    -e WG_PKEY="${SERVER_KEY}" \
+    -e WG_PEER="wg-server:12345" \
+    "$DOCKERIMAGE" >/dev/null
 
-while [[ ! -f ${shared}/client-done ]]; do
+while ! docker logs wg-client 2>/dev/null | grep "wg-setup add-peer"; do
     sleep 0.1
 done
+ADD_CMD="$(docker logs wg-client | grep "wg-setup add-peer")"
 
 echo "Adding client to server..."
-echo "Y" | docker exec -i wg-server $(<${shared}/client-setup) >/dev/null
+docker exec wg-server ${ADD_CMD} -y
 
 echo "Testing connection..."
 docker exec wg-client ping -c 1 172.16.20.1
 docker exec wg-client ping -c 2 172.16.20.1
 docker exec wg-server ping -c 2 172.16.20.2
-echo "XXXX" | docker exec -i wg-client nc -N 172.16.20.1 9999
 
-[[ "$(<${shared}/nc-out)" == "XXXX" ]]
+echo "Removing peer..."
+docker exec wg-server wg-setup remove-peer -y 172.16.20.2
+
 echo "Success!"
-! docker exec wg-client nc -N 127.0.0.1 9998
 rm -rf ${shared}

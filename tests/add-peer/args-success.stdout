@@ -4,4 +4,4 @@
 PublicKey = iCJSbobpCRHCG2/WP9D1/viGlv\+WrNpWtd1XkRzyrFs=
 AllowedIPs = 172\.16\.1\.2/32
 
-Add this configuration to /tmp/tmp\.[[:alnum:]]+/infile\? \[Y/n\] 
+Add this configuration to /etc/systemd/network/90-wireguard.netdev\? \[Y/n\] 

@@ -4,4 +4,4 @@
 PublicKey = iCJSbobpCRHCG2/WP9D1/viGlv\+WrNpWtd1XkRzyrFs=
 AllowedIPs = 172\.16\.1\.2/32
 
-Remove this configuration from /tmp/tmp\.[[:alnum:]]+/infile\? \[y/N\] 
+Remove this configuration from /etc/systemd/network/90-wireguard.netdev\? \[y/N\] 
