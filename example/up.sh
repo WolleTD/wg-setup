@@ -37,7 +37,7 @@ docker-compose exec wg-client ping -c 2 172.16.10.1
 docker-compose exec wg-server ping -c 2 172.16.10.2
 
 echo "Trying to connect to nginx from the server"
-docker-compose exec wg-server wget http://wg-client/
+docker-compose exec wg-server wget http://172.16.10.2/
 
 echo "==== If you can read this, everything seems to work. Yay! ===="
 echo "The containers are still running, use docker-compose down to stop them."

@@ -43,6 +43,11 @@ services:
     # The wg-setup container requires CAP_NET_ADMIN to modify it's WireGuard interface
     cap_add:
       - NET_ADMIN
+    # If running watchtower, this container should be set to monitor-only, because the network
+    # configuration of the nginx container depends on the particular container-id found on startup.
+    # When this container gets recreated, nginx has to be recreated as well.
+    labels:
+      - com.centurylinklabs.watchtower.monitor-only="true"
     # Disabled for demonstration purposes
     # volumes:
     #   - wg-client:/etc/wireguard
