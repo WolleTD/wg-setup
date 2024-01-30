@@ -23,15 +23,15 @@ systemd-booted() {
 
 usage() {
     cat <<EOF
-Usage: $0 [-fhst] [-d descr] [-e <endpoint>] [-i <name>] [-p pubkey]
-        [ip-addr] [port (with -s)]
+Usage: $0 [-fhs] [-d <descr>] [-e <endpoint>] [-i <ifname>] [-o <file>]
+        [-p <pubkey>] [-t <type>] [ip-addr] [port (with -s)]
 
     -b,--backend=<backend>    Backend to configure (networkd, wg-quick or auto (default))
     -d,--descr=<description>  Description for .netdev (default: WireGuard VPN)
     -e,--endpoint=<endpoint>  WireGuard endpoint of the Server
     -f,--force                overwrite existing files
     -h,--help                 Show this usage text
-    -i,--iface=<ifname>       name of the WireGuard interface to create (default: wg0)
+    -i,--ifname=<ifname>      name of the WireGuard interface to create (default: wg0)
     -o,--out-file=<file>      File mode: don't configure interface, write configuration to
                               given file (- for stdout). For networkd files, either .netdev
                               or .network can be provided and both will be created.
@@ -103,7 +103,7 @@ EOF
 command -v wg >/dev/null || error "wg not found. Please install wireguard-tools first!"
 
 opts=d:e:fhi:o:p:st:
-lopts=descr:,endpoint:,force,help,iface:,out-file:,pubkey:,server,type:
+lopts=descr:,endpoint:,force,help,iface:,ifname:,out-file:,pubkey:,server,type:
 parsed_opts=$(getopt -o $opts -l $lopts -n "$0" -- "$@")
 eval set -- "$parsed_opts"
 
@@ -141,7 +141,12 @@ while [[ "$1" != "--" ]]; do
     -h|--help)
         usage
         ;;
-    -i|--iface)
+    -i|--ifname)
+        wg_ifname="$2"
+        shift 2
+        ;;
+    --iface)
+        echo "Warning: --iface is deprecated, use --ifname" >&2
         wg_ifname="$2"
         shift 2
         ;;
