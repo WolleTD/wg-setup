@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-DOCKERIMAGE="wolletd/wg-setup:latest"
+DOCKERIMAGE="ghcr.io/wolletd/wg-setup:latest"
 
 docker build -t "$DOCKERIMAGE" ..
 
