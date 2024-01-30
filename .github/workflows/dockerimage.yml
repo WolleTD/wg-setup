@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Pull repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       - name: Build the image
         run: docker build . --tag wolletd/wg-setup:latest
       - name: Login to Docker Hub
