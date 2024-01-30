@@ -6,7 +6,7 @@
 # This is not sophisticated, but meant to customize or just inspire. Have fun.
 #   created by Eicke Herbertz, 2020
 
-set -eu
+set -euo pipefail
 
 error() {
     echo "Error: $*" >&2
@@ -26,16 +26,23 @@ usage() {
 Usage: $0 [-fhst] [-d descr] [-e <endpoint>] [-i <name>] [-p pubkey]
         [ip-addr] [port (with -s)]
 
-    -b,--backend    Backend to configure (networkd, wg-quick or auto (default))
-    -d,--descr      Description for .netdev (default: WireGuard VPN)
-    -e,--endpoint   WireGuard endpoint of the Server
-    -f,--force      overwrite existing files
-    -h,--help       Show this usage text
-    -i,--iface      name of the WireGuard interface to create (default: wg0)
-    -p,--pubkey     WireGuard public key of the Server
-    -s,--server     Create a server configuration (skip peer setup)
-    ip-addr         ip address for this client
-    port            listening port in --server mode
+    -b,--backend=<backend>    Backend to configure (networkd, wg-quick or auto (default))
+    -d,--descr=<description>  Description for .netdev (default: WireGuard VPN)
+    -e,--endpoint=<endpoint>  WireGuard endpoint of the Server
+    -f,--force                overwrite existing files
+    -h,--help                 Show this usage text
+    -i,--iface=<ifname>       name of the WireGuard interface to create (default: wg0)
+    -o,--out-file=<file>      File mode: don't configure interface, write configuration to
+                              given file (- for stdout). For networkd files, either .netdev
+                              or .network can be provided and both will be created.
+    -p,--pubkey=<pubkey>      WireGuard public key of the Server
+    -s,--server               Create a server configuration (skip peer setup)
+    -t,--type=<type>          Type of output for file mode, supported values are:
+                                auto (default), wg-quick, networkd, zip, qr-utf8, qr-png
+                                *auto* uses qr-utf8 if out-file is stdout, otherwise tries
+                                to read the file extension and falls back to wg-quick format.
+    ip-addr                   ip address for this client
+    port                      listening port in --server mode
 EOF
     exit $1
 }
@@ -95,8 +102,8 @@ EOF
 
 command -v wg >/dev/null || error "wg not found. Please install wireguard-tools first!"
 
-opts=d:e:fhi:p:s
-lopts=descr:,endpoint:,force,help,iface:,pubkey:,server
+opts=d:e:fhi:o:p:st:
+lopts=descr:,endpoint:,force,help,iface:,out-file:,pubkey:,server,type:
 parsed_opts=$(getopt -o $opts -l $lopts -n "$0" -- "$@")
 eval set -- "$parsed_opts"
 
@@ -106,6 +113,9 @@ backend=auto
 force=
 wg_ifname=wg0
 wg_public_key=
+file_mode=
+out_file=
+out_type=auto
 create_server=
 ip_address=
 server_port=
@@ -135,6 +145,11 @@ while [[ "$1" != "--" ]]; do
         wg_ifname="$2"
         shift 2
         ;;
+    -o|--out-file)
+        file_mode=1
+        out_file="$2"
+        shift 2
+        ;;
     -p|--pubkey)
         wg_public_key="$2"
         shift 2
@@ -142,6 +157,10 @@ while [[ "$1" != "--" ]]; do
     -s|--server)
         create_server=yes
         shift
+        ;;
+    -t|--type)
+        out_type="$2"
+        shift 2
         ;;
     *)
         echo "Programming error" >&2
@@ -158,11 +177,8 @@ shift # away the --
 # Fail when client setup is called with a second positional.
 [[ ! ${create_server} && -n "${server_port}" ]] && usage 1
 
-# Ensure WG_TEST is defined
-WG_TEST=${WG_TEST:-}
-
 # Check that we are running as root or testing (TODO: have an actual test suite)
-[[ $UID -eq 0 || -n "${WG_TEST}" ]] || error "Please run as root!"
+[[ $UID -eq 0 || -n "${file_mode}" ]] || error "Please run as root!"
 
 # Now read all required parameters that weren't provided as arguments interactively
 
@@ -222,25 +238,55 @@ wg_allowed_ips="${network_addr}/${ip_netmask}"
 
 # If backend is set to auto, check which one to use
 if [[ "$backend" == "auto" ]]; then
-    if has-systemd && systemctl is-enabled systemd-networkd.service >/dev/null; then
+    if [[ $file_mode ]]; then
+        backend=none
+        if [[ "$out_type" == "auto" ]]; then
+            case "$out_file" in
+                -)
+                    out_type=qr-utf8 ;;
+                *.png)
+                    out_type=qr-png ;;
+                *.zip)
+                    out_type=zip ;;
+                *.network|*.netdev)
+                    out_type=networkd ;;
+                *)
+                    out_type=wg-quick ;;
+            esac
+        fi
+    elif has-systemd && systemctl is-enabled systemd-networkd.service >/dev/null; then
         backend=networkd
+        out_type=networkd
+        wg_basename=${WG_BASENAME:-90-wireguard}
+        out_file=/etc/systemd/network/${wg_basename}.netdev
     else
         backend=wg-quick
+        out_type=wg-quick
+        out_file=/etc/wireguard/${wg_ifname}.conf
     fi
 fi
+
+[[ -f "${out_file}" && -z "${force}" ]] &&
+    error "${out_file} already exists (use -f to overwrite)!"
 
 # Setup the selected backend. The code further below will not use the $backend variable directly,
 # but the WG_QUICK_CONF, WG_NETDEV and WG_NETWORK variables defined here.
 # It is possible to predefine these variables in the environment and use custom paths.
-case "$backend" in
+case "$out_type" in
     networkd)
         echo "Using systemd-networkd for configuration"
-        unset wg_quick_conf
 
-        wg_basename=${WG_BASENAME:-90-wireguard}
-        wg_netdev=${WG_NETDEV:-/etc/systemd/network/${wg_basename}.netdev}
-        wg_network=${WG_NETWORK:-/etc/systemd/network/${wg_basename}.network}
+        if [[ "$out_file" == "-" ]]; then
+            error "Can't write systemd-networkd configuration to stdout!"
+        elif [[ "${out_file%.netdev}" == "${out_file}" ]]; then
+            wg_netdev=${out_file%.network}.netdev
+            wg_network=${out_file}
+        else
+            wg_netdev=${out_file}
+            wg_network=${out_file%.netdev}.network
+        fi
 
+        # Check for existing files one more since we mangled filenames.
         [[ -f "${wg_netdev}" && -z "${force}" ]] &&
             error "${wg_netdev} already exists (use -f to overwrite)!"
         [[ -f "${wg_network}" && -z "${force}" ]] &&
@@ -248,15 +294,19 @@ case "$backend" in
         ;;
     wg-quick)
         echo "Using wg-quick for configuration"
-        unset wg_netdev wg_network
+        [[ "$out_file" == "-" ]] && out_file=/dev/stdout
+        wg_quick_conf=${out_file}
 
-        wg_quick_conf=${WG_QUICK_CONF:-/etc/wireguard/${wg_ifname}.conf}
-
-        [[ -f "${wg_quick_conf}" && -z "${force}" ]] &&
-            error "${wg_quick_conf} already exists (use -f to overwrite)!"
+        ;;
+    zip|qr-utf8|qr-png)
+        echo "Creating temporary configuration for ${out_type}"
+        temp_dir=$(mktemp -d)
+        temp_file=${out_file##*/}
+        temp_file=${temp_file%.*}.conf
+        wg_quick_conf=${temp_dir}/${temp_file}
         ;;
     *)
-        error "Unknown backend ${backend}!"
+        error "Unknown output type ${out_type}!"
         ;;
 esac
 
@@ -300,7 +350,7 @@ EOF
 
 # Set permissions and ownership of the new files
 chmod 0640 "${wg_conf_target}"
-[[ -n "${wg_netdev:-}" && -z "${WG_TEST}" ]] && chgrp systemd-network "${wg_netdev}"
+[[ -n "${wg_netdev:-}" && -z "${file_mode}" ]] && chgrp systemd-network "${wg_netdev}"
 
 # Select which service to enable and (re)start
 if [[ -z "${wg_quick_conf:-}" ]]; then
@@ -310,21 +360,34 @@ else
 fi
 
 # Enable the service if we have systemd
-if [[ ! ${WG_TEST} ]] && has-systemd; then
+if [[ ! ${file_mode} ]] && has-systemd; then
     systemctl enable "${service}"
 fi
 
+if [[ ${file_mode} ]]; then
+    echo "File mode: Skipping further system configuration."
+
+    case "$out_type" in
+        zip)
+            zip -j "$out_file" "$wg_quick_conf"
+            ;;
+        qr-png)
+            qrencode -t PNG -o "$out_file" -r "$wg_quick_conf"
+            ;;
+        qr-utf8)
+            qrencode -t UTF8 -o "$out_file" -r "$wg_quick_conf"
+            ;;
+    esac
+    [[ -d "${temp_dir:-}" ]] && rm -rf "$temp_dir"
 # Check for wireguard module and try to bring up the interface
-if ! lsmod | grep ^wireguard >/dev/null && ! modprobe wireguard; then
+elif ! lsmod | grep ^wireguard >/dev/null && ! modprobe wireguard; then
     echo "Can't load WireGuard module! Probably the kernel got updated, please reboot!" >&2
     if [[ ${create_server} && -z "${server_port}" ]]; then
         echo "Could not start server and no port was set!" >&2
         echo "You will have to set the ListenPort manually in ${wg_conf_target}" >&2
     fi
 else
-    if [[ ${WG_TEST} ]]; then
-        echo "Testing: Skipping (re)starting ${service}."
-    elif has-systemd && systemd-booted; then
+    if has-systemd && systemd-booted; then
         echo "(Re)starting ${service}"
         systemctl restart "${service}"
     elif has-systemd; then
