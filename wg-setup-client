@@ -23,7 +23,7 @@ systemd-booted() {
 
 usage() {
     cat <<EOF
-Usage: $0 [-fhs] [-d <descr>] [-e <endpoint>] [-i <ifname>] [-o <file>]
+Usage: $0 [-fhs] [-d <descr>] [-e <endpoint>] [-i <ifname>] [-n <hostname>] [-o <file>]
         [-p <pubkey>] [-t <type>] [ip-addr] [port (with -s)]
 
     -b,--backend=<backend>    Backend to configure (networkd, wg-quick or auto (default))
@@ -32,6 +32,8 @@ Usage: $0 [-fhs] [-d <descr>] [-e <endpoint>] [-i <ifname>] [-o <file>]
     -f,--force                overwrite existing files
     -h,--help                 Show this usage text
     -i,--ifname=<ifname>      name of the WireGuard interface to create (default: wg0)
+    -n,--name=<hostname>      Client name on the server instead of \$HOSTNAME, useful for
+                              file mode and containers
     -o,--out-file=<file>      File mode: don't configure interface, write configuration to
                               given file (- for stdout). For networkd files, either .netdev
                               or .network can be provided and both will be created.
@@ -102,8 +104,8 @@ EOF
 
 command -v wg >/dev/null || error "wg not found. Please install wireguard-tools first!"
 
-opts=d:e:fhi:o:p:st:
-lopts=descr:,endpoint:,force,help,iface:,ifname:,out-file:,pubkey:,server,type:
+opts=d:e:fhi:n:o:p:st:
+lopts=descr:,endpoint:,force,help,iface:,ifname:,name:,out-file:,pubkey:,server,type:
 parsed_opts=$(getopt -o $opts -l $lopts -n "$0" -- "$@")
 eval set -- "$parsed_opts"
 
@@ -112,6 +114,7 @@ wg_endpoint=
 backend=auto
 force=
 wg_ifname=wg0
+hostname=$HOSTNAME
 wg_public_key=
 file_mode=
 out_file=
@@ -148,6 +151,10 @@ while [[ "$1" != "--" ]]; do
     --iface)
         echo "Warning: --iface is deprecated, use --ifname" >&2
         wg_ifname="$2"
+        shift 2
+        ;;
+    -n|--name)
+        hostname="$2"
         shift 2
         ;;
     -o|--out-file)
@@ -420,7 +427,7 @@ fi
 if [[ ! ${create_server} ]]; then
     echo "============================================================
 WireGuard setup successful! Server side add-peer command:
-wg-setup add-peer ${HOSTNAME} ${public_key} ${ip_address}"
+wg-setup add-peer ${hostname} ${public_key} ${ip_address}"
     exit 0
 else
     echo "============================================================
