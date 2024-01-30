@@ -6,7 +6,7 @@
 # This is not sophisticated, but meant to customize or just inspire. Have fun.
 #   created by Eicke Herbertz, 2020
 
-set -eu
+set -euo pipefail
 
 error() {
     echo "Error: $*" >&2
@@ -26,16 +26,23 @@ usage() {
 Usage: $0 [-fhst] [-d descr] [-e <endpoint>] [-i <name>] [-p pubkey]
         [ip-addr] [port (with -s)]
 
-    -b,--backend    Backend to configure (networkd, wg-quick or auto (default))
-    -d,--descr      Description for .netdev (default: WireGuard VPN)
-    -e,--endpoint   WireGuard endpoint of the Server
-    -f,--force      overwrite existing files
-    -h,--help       Show this usage text
-    -i,--iface      name of the WireGuard interface to create (default: wg0)
-    -p,--pubkey     WireGuard public key of the Server
-    -s,--server     Create a server configuration (skip peer setup)
-    ip-addr         ip address for this client
-    port            listening port in --server mode
+    -b,--backend=<backend>    Backend to configure (networkd, wg-quick or auto (default))
+    -d,--descr=<description>  Description for .netdev (default: WireGuard VPN)
+    -e,--endpoint=<endpoint>  WireGuard endpoint of the Server
+    -f,--force                overwrite existing files
+    -h,--help                 Show this usage text
+    -i,--iface=<ifname>       name of the WireGuard interface to create (default: wg0)
+    -o,--out-file=<file>      File mode: don't configure interface, write configuration to
+                              given file (- for stdout). For networkd files, either .netdev
+                              or .network can be provided and both will be created.
+    -p,--pubkey=<pubkey>      WireGuard public key of the Server
+    -s,--server               Create a server configuration (skip peer setup)
+    -t,--type=<type>          Type of output for file mode, supported values are:
+                                auto (default), wg-quick, networkd, zip, qr-utf8, qr-png
+                                *auto* uses qr-utf8 if out-file is stdout, otherwise tries
+                                to read the file extension and falls back to wg-quick format.
+    ip-addr                   ip address for this client
+    port                      listening port in --server mode
 EOF
     exit $1
 }
@@ -95,53 +102,65 @@ EOF
 
 command -v wg >/dev/null || error "wg not found. Please install wireguard-tools first!"
 
-OPTS=d:e:fhi:p:s
-LOPTS=descr:,endpoint:,force,help,iface:,pubkey:,server
-PARSED_OPTS=$(getopt -o $OPTS -l $LOPTS -n "$0" -- "$@")
-eval set -- "$PARSED_OPTS"
+opts=d:e:fhi:o:p:st:
+lopts=descr:,endpoint:,force,help,iface:,out-file:,pubkey:,server,type:
+parsed_opts=$(getopt -o $opts -l $lopts -n "$0" -- "$@")
+eval set -- "$parsed_opts"
 
-WG_DESC="WireGuard VPN"
-WG_ENDPOINT=
-BACKEND=auto
-FORCE=
-WG_IFNAME=wg0
-WG_PUBLIC_KEY=
-CREATE_SERVER=
-IP_ADDRESS=
-SERVER_PORT=
+wg_description="WireGuard VPN"
+wg_endpoint=
+backend=auto
+force=
+wg_ifname=wg0
+wg_public_key=
+file_mode=
+out_file=
+out_type=auto
+create_server=
+ip_address=
+server_port=
 
 while [[ "$1" != "--" ]]; do
     case $1 in
     -b|--backend)
-        BACKEND="$2"
+        backend="$2"
         shift 2
         ;;
     -d|--descr)
-        WG_DESC="$2"
+        wg_description="$2"
         shift 2
         ;;
     -e|--endpoint)
-        WG_ENDPOINT="$2"
+        wg_endpoint="$2"
         shift 2
         ;;
     -f|--force)
-        FORCE=yes
+        force=yes
         shift
         ;;
     -h|--help)
         usage
         ;;
     -i|--iface)
-        WG_IFNAME="$2"
+        wg_ifname="$2"
+        shift 2
+        ;;
+    -o|--out-file)
+        file_mode=1
+        out_file="$2"
         shift 2
         ;;
     -p|--pubkey)
-        WG_PUBLIC_KEY="$2"
+        wg_public_key="$2"
         shift 2
         ;;
     -s|--server)
-        CREATE_SERVER=yes
+        create_server=yes
         shift
+        ;;
+    -t|--type)
+        out_type="$2"
+        shift 2
         ;;
     *)
         echo "Programming error" >&2
@@ -152,212 +171,256 @@ done
 shift # away the --
 
 # All positional arguments are optional. Client setup accepts one, server setup two values.
-[[ $# -ge 1 ]] && IP_ADDRESS="$1"
-[[ $# -ge 2 ]] && SERVER_PORT="$2"
+[[ $# -ge 1 ]] && ip_address="$1"
+[[ $# -ge 2 ]] && server_port="$2"
 [[ $# -ge 3 ]] && usage 1
 # Fail when client setup is called with a second positional.
-[[ ! ${CREATE_SERVER} && -n "${SERVER_PORT}" ]] && usage 1
-
-# Ensure WG_TEST is defined
-WG_TEST=${WG_TEST:-}
+[[ ! ${create_server} && -n "${server_port}" ]] && usage 1
 
 # Check that we are running as root or testing (TODO: have an actual test suite)
-[[ $UID -eq 0 || -n "${WG_TEST}" ]] || error "Please run as root!"
+[[ $UID -eq 0 || -n "${file_mode}" ]] || error "Please run as root!"
 
 # Now read all required parameters that weren't provided as arguments interactively
 
 # The IP address is required for both server and client
-if [[ -z "${IP_ADDRESS}" ]]; then
-    [[ ${CREATE_SERVER} ]] && \
+if [[ -z "${ip_address}" ]]; then
+    [[ ${create_server} ]] && \
         echo -n "Enter server ip address: " || \
         echo -n "Enter ip address for this client: "
-    read -r IP_ADDRESS
+    read -r ip_address
 fi
 
-[[ "${IP_ADDRESS}" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}(/[0-9]{1,2})?$ ]] || error "Invalid ip address"
+[[ "${ip_address}" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}(/[0-9]{1,2})?$ ]] || error "Invalid ip address"
 
 # Then, read the listening port for a server or a server´s public key and endpoint for a client
-if [[ ${CREATE_SERVER} ]]; then
-    if [[ -z "${SERVER_PORT}" ]]; then
+if [[ ${create_server} ]]; then
+    if [[ -z "${server_port}" ]]; then
         echo -n "Enter server listening port (empty: random port): "
-        read -r SERVER_PORT
+        read -r server_port
     fi
 
-    [[ "${SERVER_PORT}" =~ ^[0-9]{1,5}$ ]] || error "Invalid port"
+    [[ "${server_port}" =~ ^[0-9]{1,5}$ ]] || error "Invalid port"
 else
-    if [[ -z "${WG_PUBLIC_KEY}" ]]; then
+    if [[ -z "${wg_public_key}" ]]; then
         echo -n "Server PublicKey: "
-        read -r WG_PUBLIC_KEY
+        read -r wg_public_key
     fi
 
-    [[ "${WG_PUBLIC_KEY}" =~ ^[A-Za-z0-9/+]{43}=$ ]] || error "Invalid PublicKey format!"
+    [[ "${wg_public_key}" =~ ^[A-Za-z0-9/+]{43}=$ ]] || error "Invalid PublicKey format!"
 
-    if [[ -z "${WG_ENDPOINT}" ]]; then
+    if [[ -z "${wg_endpoint}" ]]; then
         echo -n "Server Endpoint: "
-        read -r WG_ENDPOINT
+        read -r wg_endpoint
     fi
 
-    [[ "${WG_ENDPOINT}" =~ ^[A-Za-z0-9.-]+:[0-9]+$ ]] || error "Invalid Endpoint (host:port)!"
+    [[ "${wg_endpoint}" =~ ^[A-Za-z0-9.-]+:[0-9]+$ ]] || error "Invalid Endpoint (host:port)!"
 fi
 
 # If subnet is provided on ip address use it
-if [[ "${IP_ADDRESS%/*}" != "${IP_ADDRESS}" ]]; then
-    IP_NETMASK="${IP_ADDRESS#*/}"
-    IP_ADDRESS="${IP_ADDRESS%/*}"
-    [[ "${IP_NETMASK}" =~ ^[0-9]{2}$ ]] || error "Invalid subnet length ${IP_NETMASK}"
+if [[ "${ip_address%/*}" != "${ip_address}" ]]; then
+    ip_netmask="${ip_address#*/}"
+    ip_address="${ip_address%/*}"
+    [[ "${ip_netmask}" =~ ^[0-9]{2}$ ]] || error "Invalid subnet length ${ip_netmask}"
 else
     echo "Warning: No subnet lenght provided, using /24!"
-    IP_NETMASK=24
+    ip_netmask=24
 fi
 
 # Calculate network from IP address and subnet length
-network_addr=$(network "${IP_ADDRESS}" "${IP_NETMASK}")
+network_addr=$(network "${ip_address}" "${ip_netmask}")
 
 # Check parsed result (TODO: write tests for the conversion and not check here)
 [[ "${network_addr}" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] ||
     error "Failed to calculate network address (Result: ${network_addr})"
 
 # TODO: make this configurable
-WG_ALLOWED_IPS="${network_addr}/${IP_NETMASK}"
+wg_allowed_ips="${network_addr}/${ip_netmask}"
 
 # If backend is set to auto, check which one to use
-if [[ "$BACKEND" == "auto" ]]; then
-    if has-systemd && systemctl is-enabled systemd-networkd.service >/dev/null; then
-        BACKEND=networkd
+if [[ "$backend" == "auto" ]]; then
+    if [[ $file_mode ]]; then
+        backend=none
+        if [[ "$out_type" == "auto" ]]; then
+            case "$out_file" in
+                -)
+                    out_type=qr-utf8 ;;
+                *.png)
+                    out_type=qr-png ;;
+                *.zip)
+                    out_type=zip ;;
+                *.network|*.netdev)
+                    out_type=networkd ;;
+                *)
+                    out_type=wg-quick ;;
+            esac
+        fi
+    elif has-systemd && systemctl is-enabled systemd-networkd.service >/dev/null; then
+        backend=networkd
+        out_type=networkd
+        wg_basename=${WG_BASENAME:-90-wireguard}
+        out_file=/etc/systemd/network/${wg_basename}.netdev
     else
-        BACKEND=wg-quick
+        backend=wg-quick
+        out_type=wg-quick
+        out_file=/etc/wireguard/${wg_ifname}.conf
     fi
 fi
 
-# Setup the selected backend. The code further below will not use the $BACKEND variable directly,
+[[ -f "${out_file}" && -z "${force}" ]] &&
+    error "${out_file} already exists (use -f to overwrite)!"
+
+# Setup the selected backend. The code further below will not use the $backend variable directly,
 # but the WG_QUICK_CONF, WG_NETDEV and WG_NETWORK variables defined here.
 # It is possible to predefine these variables in the environment and use custom paths.
-case "$BACKEND" in
+case "$out_type" in
     networkd)
         echo "Using systemd-networkd for configuration"
-        unset WG_QUICK_CONF
 
-        WG_BASENAME=${WG_BASENAME:-90-wireguard}
-        WG_NETDEV=${WG_NETDEV:-/etc/systemd/network/${WG_BASENAME}.netdev}
-        WG_NETWORK=${WG_NETWORK:-/etc/systemd/network/${WG_BASENAME}.network}
+        if [[ "$out_file" == "-" ]]; then
+            error "Can't write systemd-networkd configuration to stdout!"
+        elif [[ "${out_file%.netdev}" == "${out_file}" ]]; then
+            wg_netdev=${out_file%.network}.netdev
+            wg_network=${out_file}
+        else
+            wg_netdev=${out_file}
+            wg_network=${out_file%.netdev}.network
+        fi
 
-        [[ -f "${WG_NETDEV}" && -z "${FORCE}" ]] &&
-            error "${WG_NETDEV} already exists (use -f to overwrite)!"
-        [[ -f "${WG_NETWORK}" && -z "${FORCE}" ]] &&
-            error "${WG_NETWORK} already exists (use -f to overwrite)!"
+        # Check for existing files one more since we mangled filenames.
+        [[ -f "${wg_netdev}" && -z "${force}" ]] &&
+            error "${wg_netdev} already exists (use -f to overwrite)!"
+        [[ -f "${wg_network}" && -z "${force}" ]] &&
+            error "${wg_network} already exists (use -f to overwrite)!"
         ;;
     wg-quick)
         echo "Using wg-quick for configuration"
-        unset WG_NETDEV WG_NETWORK
+        [[ "$out_file" == "-" ]] && out_file=/dev/stdout
+        wg_quick_conf=${out_file}
 
-        WG_QUICK_CONF=${WG_QUICK_CONF:-/etc/wireguard/${WG_IFNAME}.conf}
-
-        [[ -f "${WG_QUICK_CONF}" && -z "${FORCE}" ]] &&
-            error "${WG_QUICK_CONF} already exists (use -f to overwrite)!"
+        ;;
+    zip|qr-utf8|qr-png)
+        echo "Creating temporary configuration for ${out_type}"
+        temp_dir=$(mktemp -d)
+        temp_file=${out_file##*/}
+        temp_file=${temp_file%.*}.conf
+        wg_quick_conf=${temp_dir}/${temp_file}
         ;;
     *)
-        error "Unknown backend ${BACKEND}!"
+        error "Unknown output type ${out_type}!"
         ;;
 esac
 
 # The networkd configuration is split into a .network and a .netdev file, while wg-quick has only one.
-if [[ ${WG_NETWORK:-} ]]; then
-    networkd_network_header "${WG_IFNAME}" > "${WG_NETWORK}"
-    networkd_netdev_header "${WG_IFNAME}" "${WG_DESC}" > "${WG_NETDEV}"
+if [[ ${wg_network:-} ]]; then
+    networkd_network_header "${wg_ifname}" > "${wg_network}"
+    networkd_netdev_header "${wg_ifname}" "${wg_description}" > "${wg_netdev}"
 else
-    wg_quick_conf_header "${WG_IFNAME}" "${WG_DESC}" > "${WG_QUICK_CONF}"
+    wg_quick_conf_header "${wg_ifname}" "${wg_description}" > "${wg_quick_conf}"
 fi
 
 # The configuration keys and format of networkd and wg-quick are identical, only the
 # sections have different names. So we can use the same code for both.
-WG_CONF_TARGET="${WG_QUICK_CONF:-${WG_NETDEV}}"
+wg_conf_target="${wg_quick_conf:-${wg_netdev}}"
 
-# This will write an empty value if no SERVER_PORT is provided. If we bring the interface
+# This will write an empty value if no server_port is provided. If we bring the interface
 # up successfully, the actual port will be set later in the script.
-[[ ${CREATE_SERVER} ]] && echo "ListenPort = ${SERVER_PORT}" >> "${WG_CONF_TARGET}"
+[[ ${create_server} ]] && echo "ListenPort = ${server_port}" >> "${wg_conf_target}"
 
 # Generate and write the private key. We'll only keep the public key to print out at the end.
-PRIVATE_KEY="$(wg genkey)"
-PUBLIC_KEY="$(wg pubkey <<<${PRIVATE_KEY})"
-echo "PrivateKey = ${PRIVATE_KEY}" >> "${WG_CONF_TARGET}"
-unset PRIVATE_KEY
+private_key="$(wg genkey)"
+public_key="$(wg pubkey <<<${private_key})"
+echo "PrivateKey = ${private_key}" >> "${wg_conf_target}"
+unset private_key
 
 # Only the IP address goes into the network file when using systemd-networkd
-echo "Address = ${IP_ADDRESS}/${IP_NETMASK}" >> "${WG_QUICK_CONF:-${WG_NETWORK}}"
+echo "Address = ${ip_address}/${ip_netmask}" >> "${wg_quick_conf:-${wg_network}}"
 
 # Add a blank line before peer configuration
-echo >> "${WG_CONF_TARGET}"
+echo >> "${wg_conf_target}"
 
 # If configuring a client, write the server peer configuration
-[[ ! ${CREATE_SERVER} ]] && cat >> "${WG_CONF_TARGET}" <<EOF
-[${WG_NETDEV:+WireGuard}Peer]
-PublicKey = ${WG_PUBLIC_KEY}
-AllowedIPs = ${WG_ALLOWED_IPS}
-Endpoint = ${WG_ENDPOINT}
+[[ ! ${create_server} ]] && cat >> "${wg_conf_target}" <<EOF
+[${wg_netdev:+WireGuard}Peer]
+PublicKey = ${wg_public_key}
+AllowedIPs = ${wg_allowed_ips}
+Endpoint = ${wg_endpoint}
 PersistentKeepalive = 25
 
 EOF
 
 # Set permissions and ownership of the new files
-chmod 0640 "${WG_CONF_TARGET}"
-[[ -n "${WG_NETDEV:-}" && -z "${WG_TEST}" ]] && chgrp systemd-network "${WG_NETDEV}"
+chmod 0640 "${wg_conf_target}"
+[[ -n "${wg_netdev:-}" && -z "${file_mode}" ]] && chgrp systemd-network "${wg_netdev}"
 
 # Select which service to enable and (re)start
-if [[ -z "${WG_QUICK_CONF:-}" ]]; then
-    SERVICE="systemd-networkd.service"
+if [[ -z "${wg_quick_conf:-}" ]]; then
+    service="systemd-networkd.service"
 else
-    SERVICE="wg-quick@${WG_IFNAME}.service"
+    service="wg-quick@${wg_ifname}.service"
 fi
 
 # Enable the service if we have systemd
-if [[ ! ${WG_TEST} ]] && has-systemd; then
-    systemctl enable "${SERVICE}"
+if [[ ! ${file_mode} ]] && has-systemd; then
+    systemctl enable "${service}"
 fi
 
+if [[ ${file_mode} ]]; then
+    echo "File mode: Skipping further system configuration."
+
+    case "$out_type" in
+        zip)
+            zip -j "$out_file" "$wg_quick_conf"
+            ;;
+        qr-png)
+            qrencode -t PNG -o "$out_file" -r "$wg_quick_conf"
+            ;;
+        qr-utf8)
+            qrencode -t UTF8 -o "$out_file" -r "$wg_quick_conf"
+            ;;
+    esac
+    [[ -d "${temp_dir:-}" ]] && rm -rf "$temp_dir"
 # Check for wireguard module and try to bring up the interface
-if ! lsmod | grep ^wireguard >/dev/null && ! modprobe wireguard; then
+elif ! lsmod | grep ^wireguard >/dev/null && ! modprobe wireguard; then
     echo "Can't load WireGuard module! Probably the kernel got updated, please reboot!" >&2
-    if [[ ${CREATE_SERVER} && -z "${SERVER_PORT}" ]]; then
+    if [[ ${create_server} && -z "${server_port}" ]]; then
         echo "Could not start server and no port was set!" >&2
-        echo "You will have to set the ListenPort manually in ${WG_CONF_TARGET}" >&2
+        echo "You will have to set the ListenPort manually in ${wg_conf_target}" >&2
     fi
 else
-    if [[ ${WG_TEST} ]]; then
-        echo "Testing: Skipping (re)starting ${SERVICE}."
-    elif has-systemd && systemd-booted; then
-        echo "(Re)starting ${SERVICE}"
-        systemctl restart "${SERVICE}"
+    if has-systemd && systemd-booted; then
+        echo "(Re)starting ${service}"
+        systemctl restart "${service}"
     elif has-systemd; then
-        echo "systemd not booted, skipping (re)starting ${SERVICE}."
+        echo "systemd not booted, skipping (re)starting ${service}."
     else
-        echo "Installing without systemd: Running wg-quick up ${WG_IFNAME}"
-        if ! wg-quick up ${WG_IFNAME}; then
+        echo "Installing without systemd: Running wg-quick up ${wg_ifname}"
+        if ! wg-quick up ${wg_ifname}; then
             echo "Couldn't start WireGuard interface! If running in a container, probably CAP_NET_ADMIN is missing." >&2
         fi
     fi
 
     # If we are setting up a server and had no listening port provided, WireGuard will select a
     # random port which we'll extract and write it to the configuration to make it persistent.
-    if [[ ${CREATE_SERVER} && -z "${SERVER_PORT}" ]]; then
-        SERVER_PORT=$(wg show "${WG_IFNAME}" | awk '/listening port/{print $3}')
-        if [[ -z "${SERVER_PORT}" ]]; then
+    if [[ ${create_server} && -z "${server_port}" ]]; then
+        server_port=$(wg show "${wg_ifname}" | awk '/listening port/{print $3}')
+        if [[ -z "${server_port}" ]]; then
             echo "Warning: Could not determine ListenPort!" >&2
-            echo "You will have to set the ListenPort manually in ${WG_CONF_TARGET}" >&2
+            echo "You will have to set the ListenPort manually in ${wg_conf_target}" >&2
         else
-            sed -i "s/ListenPort = /ListenPort = ${SERVER_PORT}/" "${WG_CONF_TARGET}"
+            sed -i "s/ListenPort = /ListenPort = ${server_port}/" "${wg_conf_target}"
         fi
     fi
 fi
 
-if [[ ! ${CREATE_SERVER} ]]; then
+if [[ ! ${create_server} ]]; then
     echo "============================================================
 WireGuard setup successful! Server side add-peer command:
-wg-setup add-peer ${HOSTNAME} ${PUBLIC_KEY} ${IP_ADDRESS}"
+wg-setup add-peer ${HOSTNAME} ${public_key} ${ip_address}"
     exit 0
 else
     echo "============================================================
 WireGuard server setup successful!
-PublicKey: ${PUBLIC_KEY}
-ListenPort: ${SERVER_PORT}"
+PublicKey: ${public_key}
+ListenPort: ${server_port}"
     exit 0
 fi
