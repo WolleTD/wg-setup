@@ -35,14 +35,16 @@ Usage: $0 [-fhs] [-d <descr>] [-e <endpoint>] [-i <ifname>] [-n <hostname>] [-o 
     -n,--name=<hostname>      Client name on the server instead of \$HOSTNAME, useful for
                               file mode and containers
     -o,--out-file=<file>      File mode: don't configure interface, write configuration to
-                              given file (- for stdout). For networkd files, either .netdev
-                              or .network can be provided and both will be created.
+                              given file. Type is detected or specified with -t. Defaults
+                              to stdout when only -t is provided. For networkd files, either
+                              .netdev or .network can be provided and both will be created.
     -p,--pubkey=<pubkey>      WireGuard public key of the Server
+    -q,--qrcode               Output QR Code to stdout (alias for '-t qr-utf8')
     -s,--server               Create a server configuration (skip peer setup)
     -t,--type=<type>          Type of output for file mode, supported values are:
                                 auto (default), wg-quick, networkd, zip, qr-utf8, qr-png
-                                *auto* uses qr-utf8 if out-file is stdout, otherwise tries
-                                to read the file extension and falls back to wg-quick format.
+                              *auto* tries to read the file extension of -o and falls back
+                              to wg-quick format. Write to stdout if -o is not provided.
     ip-addr                   ip address for this client
     port                      listening port in --server mode
 EOF
@@ -104,8 +106,8 @@ EOF
 
 command -v wg >/dev/null || error "wg not found. Please install wireguard-tools first!"
 
-opts=d:e:fhi:n:o:p:st:
-lopts=descr:,endpoint:,force,help,iface:,ifname:,name:,out-file:,pubkey:,server,type:
+opts=d:e:fhi:n:o:p:qst:
+lopts=descr:,endpoint:,force,help,iface:,ifname:,name:,out-file:,pubkey:,qrcode,server,type:
 parsed_opts=$(getopt -o $opts -l $lopts -n "$0" -- "$@")
 eval set -- "$parsed_opts"
 
@@ -117,7 +119,7 @@ wg_ifname=wg0
 hostname=$HOSTNAME
 wg_public_key=
 file_mode=
-out_file=
+out_file=-
 out_type=auto
 create_server=
 ip_address=
@@ -166,11 +168,17 @@ while [[ "$1" != "--" ]]; do
         wg_public_key="$2"
         shift 2
         ;;
+    -q|--qrcode)
+        file_mode=1
+        out_type=qr-utf8
+        shift
+        ;;
     -s|--server)
         create_server=yes
         shift
         ;;
     -t|--type)
+        file_mode=1
         out_type="$2"
         shift 2
         ;;
@@ -254,8 +262,6 @@ if [[ "$backend" == "auto" ]]; then
         backend=none
         if [[ "$out_type" == "auto" ]]; then
             case "$out_file" in
-                -)
-                    out_type=qr-utf8 ;;
                 *.png)
                     out_type=qr-png ;;
                 *.zip)
